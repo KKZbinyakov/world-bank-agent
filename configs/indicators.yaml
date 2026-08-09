@@ -1,0 +1,64 @@
+indicators:
+  - code: NY.GDP.PCAP.CD
+    alias: gdp_per_capita
+    name_ru: ВВП на душу населения, текущие доллары США
+    category: economy
+    role: target
+    enabled: true
+    unit_hint: current_usd_per_person
+
+  - code: SP.POP.TOTL
+    alias: population
+    name_ru: Численность населения
+    category: demographics
+    role: context
+    enabled: true
+    unit_hint: people
+
+  - code: SP.URB.TOTL.IN.ZS
+    alias: urban_population_share
+    name_ru: Доля городского населения
+    category: demographics
+    role: feature
+    enabled: true
+    unit_hint: percent_of_population
+
+  - code: EG.ELC.ACCS.ZS
+    alias: electricity_access
+    name_ru: Доступ к электричеству
+    category: infrastructure
+    role: feature
+    enabled: true
+    unit_hint: percent_of_population
+
+  - code: EG.USE.ELEC.KH.PC
+    alias: electricity_use_per_capita
+    name_ru: Потребление электроэнергии на душу населения
+    category: energy
+    role: feature
+    enabled: true
+    unit_hint: kwh_per_person
+
+  - code: EN.ATM.CO2E.KT
+    alias: co2_emissions
+    name_ru: Выбросы CO2
+    category: ecology
+    role: feature
+    enabled: true
+    unit_hint: kilotons
+
+  - code: SE.XPD.TOTL.GD.ZS
+    alias: education_expenditure_share
+    name_ru: Государственные расходы на образование
+    category: education
+    role: feature
+    enabled: true
+    unit_hint: percent_of_gdp
+
+  - code: SE.ADT.LITR.ZS
+    alias: adult_literacy_rate
+    name_ru: Уровень грамотности взрослого населения
+    category: education
+    role: feature
+    enabled: false
+    unit_hint: percent_of_population_age_15_plus

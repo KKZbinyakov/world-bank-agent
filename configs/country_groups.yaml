@@ -1,0 +1,27 @@
+groups:
+  baltics:
+    name_ru: Страны Балтии
+    description: Пилотная группа для проверки сквозного pipeline.
+    countries:
+      - LVA
+      - EST
+      - LTU
+
+  comparison_europe:
+    name_ru: Сопоставимые европейские страны
+    description: Первая сравнительная группа для аналитического прототипа.
+    countries:
+      - POL
+      - DEU
+      - NLD
+
+  pilot_all:
+    name_ru: Все страны пилотного набора
+    description: Объединение стран первой версии проекта.
+    countries:
+      - LVA
+      - EST
+      - LTU
+      - POL
+      - DEU
+      - NLD

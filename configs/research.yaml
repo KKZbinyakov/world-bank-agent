@@ -1,0 +1,31 @@
+project:
+  name: WB Insight Agent
+  slug: wb-insight-agent
+  start_year: 2000
+  end_year: 2024
+
+research:
+  target_indicator: gdp_per_capita
+  questions:
+    - Как экономическое развитие связано с социальными, инфраструктурными и экологическими показателями?
+    - Как сила и направление связей менялись во времени?
+    - Как результаты различаются между регионами и группами стран по уровню дохода?
+
+scope:
+  countries:
+    - LVA
+    - EST
+    - LTU
+    - POL
+    - DEU
+    - NLD
+  comparison_groups:
+    - region
+    - income_level
+    - custom
+
+data_policy:
+  exclude_aggregates: true
+  missing_values: keep_null
+  minimum_observations_for_correlation: 20
+  require_common_year_for_rankings: true
