@@ -44,6 +44,9 @@ class AppSettings(BaseSettings):
     log_level: LogLevelName = "INFO"
     wb_api_base_url: AnyHttpUrl = AnyHttpUrl("https://api.worldbank.org/v2")
     wb_api_timeout_seconds: float = Field(default=30.0, gt=0)
+    wb_api_per_page: int = Field(default=1000, ge=1, le=20000)
+    wb_api_max_attempts: int = Field(default=3, ge=1, le=10)
+    wb_api_retry_wait_seconds: float = Field(default=0.5, ge=0, le=60)
     raw_data_dir: Path = Path("data/raw")
     processed_data_dir: Path = Path("data/processed")
     research_config_path: Path = Path("configs/research.yaml")
@@ -179,6 +182,7 @@ class IndicatorSpec(StrictConfigModel):
 class IndicatorRegistry(StrictConfigModel):
     """Top-level schema of configs/indicators.yaml."""
 
+    source_id: int = Field(default=2, gt=0)
     indicators: list[IndicatorSpec] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -277,7 +281,10 @@ def _read_yaml_mapping(path: Path) -> dict[str, Any]:
     return cast(dict[str, Any], payload)
 
 
-def _validate_yaml_model(path: Path, model_type: type[ModelT]) -> ModelT:
+def _validate_yaml_model[ModelT: BaseModel](
+    path: Path,
+    model_type: type[ModelT],
+) -> ModelT:
     """Load a YAML mapping and validate it with the supplied Pydantic model."""
 
     payload = _read_yaml_mapping(path)
@@ -329,11 +336,7 @@ def load_application_config(settings: AppSettings | None = None) -> ApplicationC
 
     unknown_scope_countries = sorted(
         set(research.scope.countries)
-        - {
-            country
-            for group in country_groups.groups.values()
-            for country in group.countries
-        }
+        - {country for group in country_groups.groups.values() for country in group.countries}
     )
     if unknown_scope_countries:
         joined = ", ".join(unknown_scope_countries)

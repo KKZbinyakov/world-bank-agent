@@ -1,0 +1,19 @@
+[
+  {"page": 1, "pages": 2, "per_page": "2", "total": 3},
+  [
+    {
+      "id": "DEU",
+      "iso2Code": "DE",
+      "name": "Germany",
+      "region": {"id": "ECS", "iso2code": "Z7", "value": "Europe & Central Asia"},
+      "incomeLevel": {"id": "HIC", "iso2code": "XD", "value": "High income"}
+    },
+    {
+      "id": "NLD",
+      "iso2Code": "NL",
+      "name": "Netherlands",
+      "region": {"id": "ECS", "iso2code": "Z7", "value": "Europe & Central Asia"},
+      "incomeLevel": {"id": "HIC", "iso2code": "XD", "value": "High income"}
+    }
+  ]
+]

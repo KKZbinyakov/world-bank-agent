@@ -196,11 +196,37 @@ python -m wb_insight show-config
 
 Подробности находятся в [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Участники
+## World Bank API client
 
-Заполнить после утверждения ролей:
+Второй этап проекта добавляет модуль `src/wb_insight/ingestion/` с синхронным клиентом World Bank Indicators API v2.
 
-- участник 1 — Data Engineering;
-- участник 2 — Analytics и BI;
-- участник 3 — Backend и LLM-агент;
-- участник 4 — Product Analytics и QA.
+Клиент предоставляет три основные операции:
+
+```python
+from wb_insight.ingestion import WorldBankClient
+
+with WorldBankClient() as client:
+    countries = client.get_countries()
+    indicators = client.get_indicators(source_id=2)
+    observations = client.get_observations(
+        country_codes=["DEU", "NLD"],
+        indicator_codes=["NY.GDP.PCAP.CD", "SP.POP.TOTL"],
+        start_year=2015,
+        end_year=2024,
+        source_id=2,
+    )
+```
+
+Реализованы:
+
+- JSON-формат ответов;
+- автоматическая пагинация;
+- несколько стран в одном запросе;
+- несколько индикаторов из одного источника;
+- фильтр периода `date=start:end`;
+- повторные попытки при временных HTTP-ошибках;
+- проверка структуры JSON-ответа;
+- явные исключения для ошибок API и некорректных ответов;
+- unit-тесты через `httpx.MockTransport` без сетевого доступа к World Bank.
+
+Клиент намеренно возвращает сырые `dict`-записи. Преобразование их в DataFrame/Parquet будет выполнено на следующем этапе в `transforms/`, чтобы HTTP-слой не смешивался с логикой подготовки данных.

@@ -1,3 +1,5 @@
+source_id: 2
+
 indicators:
   - code: NY.GDP.PCAP.CD
     alias: gdp_per_capita

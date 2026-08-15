@@ -55,8 +55,7 @@ def doctor() -> None:
     table.add_row("World Bank API", str(config.settings.wb_api_base_url), "OK")
     table.add_row(
         "Research period",
-        f"{config.research.project.start_year}–{config.research.project.end_year}",
-        "OK",
+        f"{config.research.project.start_year}-{config.research.project.end_year}OK",
     )
     table.add_row("Pilot countries", str(len(config.research.scope.countries)), "OK")
     table.add_row("Enabled indicators", str(len(config.indicators.enabled_indicators())), "OK")

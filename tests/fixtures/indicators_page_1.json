@@ -1,0 +1,21 @@
+[
+  {"page": 1, "pages": 1, "per_page": "2", "total": 2},
+  [
+    {
+      "id": "NY.GDP.PCAP.CD",
+      "name": "GDP per capita (current US$)",
+      "unit": "",
+      "source": {"id": "2", "value": "World Development Indicators"},
+      "sourceNote": "GDP per capita is gross domestic product divided by midyear population.",
+      "sourceOrganization": "World Bank national accounts data"
+    },
+    {
+      "id": "SP.POP.TOTL",
+      "name": "Population, total",
+      "unit": "",
+      "source": {"id": "2", "value": "World Development Indicators"},
+      "sourceNote": "Total population is based on the de facto definition of population.",
+      "sourceOrganization": "World Bank"
+    }
+  ]
+]
