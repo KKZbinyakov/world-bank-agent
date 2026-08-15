@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, Self, TypeVar, cast
+from typing import Any, Literal, Self, cast
 
 import yaml
 from pydantic import (
@@ -22,7 +22,6 @@ EnvironmentName = Literal["local", "test", "dev", "prod"]
 LogLevelName = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 MissingValuePolicy = Literal["keep_null", "drop", "impute"]
 IndicatorRole = Literal["target", "feature", "context"]
-ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class ConfigurationError(RuntimeError):
@@ -168,7 +167,12 @@ class ResearchConfig(StrictConfigModel):
 
 
 class IndicatorSpec(StrictConfigModel):
-    """Metadata for one World Bank indicator used by the project."""
+    """Curated semantics for one World Bank indicator.
+
+    The registry is an enrichment layer, not an allowlist: arbitrary indicator codes
+    may still be requested from the API. Registered indicators simply receive stable
+    aliases, categories and display units.
+    """
 
     code: str = Field(pattern=r"^[A-Z0-9][A-Z0-9.]*$")
     alias: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
@@ -176,23 +180,27 @@ class IndicatorSpec(StrictConfigModel):
     category: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     role: IndicatorRole
     enabled: bool = True
-    unit_hint: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    unit: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    display_unit: str | None = Field(default=None, min_length=1)
+    source_id: int | None = Field(default=None, gt=0)
 
 
 class IndicatorRegistry(StrictConfigModel):
     """Top-level schema of configs/indicators.yaml."""
 
-    source_id: int = Field(default=2, gt=0)
+    source_id: int = Field(default=2, gt=0, description="Default World Bank source id")
     indicators: list[IndicatorSpec] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_registry(self) -> Self:
         """Require unique codes and aliases and one enabled target indicator."""
 
-        codes = [indicator.code for indicator in self.indicators]
+        keys = [
+            (indicator.source_id or self.source_id, indicator.code) for indicator in self.indicators
+        ]
         aliases = [indicator.alias for indicator in self.indicators]
-        if len(codes) != len(set(codes)):
-            raise ValueError("indicator codes must be unique")
+        if len(keys) != len(set(keys)):
+            raise ValueError("indicator (source_id, code) pairs must be unique")
         if len(aliases) != len(set(aliases)):
             raise ValueError("indicator aliases must be unique")
 
@@ -209,6 +217,11 @@ class IndicatorRegistry(StrictConfigModel):
         """Return indicators included in the current project scope."""
 
         return [indicator for indicator in self.indicators if indicator.enabled]
+
+    def effective_source_id(self, indicator: IndicatorSpec) -> int:
+        """Return the indicator-level source override or the registry default."""
+
+        return indicator.source_id or self.source_id
 
 
 class CountryGroupSpec(StrictConfigModel):

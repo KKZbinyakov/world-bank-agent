@@ -172,3 +172,72 @@ groups:
 
     with pytest.raises(ConfigurationError, match="absent from the indicator registry"):
         load_application_config(settings)
+
+
+def test_repository_indicator_registry_contains_curated_units() -> None:
+    registry = load_indicator_registry(ROOT / "configs/indicators.yaml")
+    by_alias = {indicator.alias: indicator for indicator in registry.indicators}
+
+    assert by_alias["gdp_per_capita"].unit == "current_usd_per_person"
+    assert by_alias["gdp_per_capita"].display_unit == "US$ / person"
+    assert by_alias["co2_emissions"].code == "EN.GHG.CO2.MT.CE.AR5"
+    assert by_alias["co2_emissions"].unit == "mt_co2e"
+
+
+def test_indicator_registry_supports_per_indicator_source_override() -> None:
+    registry = IndicatorRegistry.model_validate(
+        {
+            "source_id": 2,
+            "indicators": [
+                {
+                    "code": "NY.GDP.PCAP.CD",
+                    "alias": "gdp_per_capita",
+                    "name_ru": "GDP",
+                    "category": "economy",
+                    "role": "target",
+                    "enabled": True,
+                },
+                {
+                    "code": "DT.DOD.DECT.CD",
+                    "alias": "external_debt",
+                    "name_ru": "External debt",
+                    "category": "debt",
+                    "role": "feature",
+                    "enabled": True,
+                    "source_id": 6,
+                },
+            ],
+        }
+    )
+
+    assert registry.effective_source_id(registry.indicators[0]) == 2
+    assert registry.effective_source_id(registry.indicators[1]) == 6
+
+
+def test_indicator_registry_allows_same_code_in_different_sources() -> None:
+    registry = IndicatorRegistry.model_validate(
+        {
+            "source_id": 2,
+            "indicators": [
+                {
+                    "code": "DUP.CODE",
+                    "alias": "dup_wdi",
+                    "name_ru": "WDI",
+                    "category": "economy",
+                    "role": "target",
+                    "enabled": True,
+                },
+                {
+                    "code": "DUP.CODE",
+                    "alias": "dup_ids",
+                    "name_ru": "IDS",
+                    "category": "debt",
+                    "role": "feature",
+                    "enabled": True,
+                    "source_id": 6,
+                },
+            ],
+        }
+    )
+
+    assert len(registry.indicators) == 2

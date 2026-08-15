@@ -1,5 +1,11 @@
-source_id: 2
+source_id: 2  # Default source for registry entries without an explicit source_id.
 
+# This file is a semantic registry and the default indicator selection.
+# It is NOT an allowlist: `wb-insight ingest --indicators CODE1,6:CODE2` may use
+# indicators from any World Bank source. Each registry entry may override source_id.
+# Unknown unqualified codes are auto-resolved only when exactly one source exposes
+# them; ambiguous codes must be written as SOURCE_ID:INDICATOR_CODE.
+# Missing units remain null instead of being guessed.
 indicators:
   - code: NY.GDP.PCAP.CD
     alias: gdp_per_capita
@@ -7,7 +13,8 @@ indicators:
     category: economy
     role: target
     enabled: true
-    unit_hint: current_usd_per_person
+    unit: current_usd_per_person
+    display_unit: US$ / person
 
   - code: SP.POP.TOTL
     alias: population
@@ -15,7 +22,8 @@ indicators:
     category: demographics
     role: context
     enabled: true
-    unit_hint: people
+    unit: people
+    display_unit: people
 
   - code: SP.URB.TOTL.IN.ZS
     alias: urban_population_share
@@ -23,7 +31,8 @@ indicators:
     category: demographics
     role: feature
     enabled: true
-    unit_hint: percent_of_population
+    unit: percent_of_population
+    display_unit: "%"
 
   - code: EG.ELC.ACCS.ZS
     alias: electricity_access
@@ -31,7 +40,8 @@ indicators:
     category: infrastructure
     role: feature
     enabled: true
-    unit_hint: percent_of_population
+    unit: percent_of_population
+    display_unit: "%"
 
   - code: EG.USE.ELEC.KH.PC
     alias: electricity_use_per_capita
@@ -39,15 +49,17 @@ indicators:
     category: energy
     role: feature
     enabled: true
-    unit_hint: kwh_per_person
+    unit: kwh_per_person
+    display_unit: kWh / person
 
-  - code: EN.ATM.CO2E.KT
+  - code: EN.GHG.CO2.MT.CE.AR5
     alias: co2_emissions
-    name_ru: Выбросы CO2
+    name_ru: Выбросы CO2, всего, без LULUCF
     category: ecology
     role: feature
     enabled: true
-    unit_hint: kilotons
+    unit: mt_co2e
+    display_unit: Mt CO2e
 
   - code: SE.XPD.TOTL.GD.ZS
     alias: education_expenditure_share
@@ -55,7 +67,8 @@ indicators:
     category: education
     role: feature
     enabled: true
-    unit_hint: percent_of_gdp
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
 
   - code: SE.ADT.LITR.ZS
     alias: adult_literacy_rate
@@ -63,4 +76,5 @@ indicators:
     category: education
     role: feature
     enabled: false
-    unit_hint: percent_of_population_age_15_plus
+    unit: percent_of_population_age_15_plus
+    display_unit: "%"

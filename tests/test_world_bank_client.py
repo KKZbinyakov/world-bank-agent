@@ -242,3 +242,131 @@ def test_more_than_sixty_indicators_are_rejected() -> None:
             end_year=2024,
             source_id=2,
         )
+
+
+def test_unexpected_json_list_shape_reports_response_shape() -> None:
+    client = make_client(lambda _: httpx.Response(200, json=[]))
+    with pytest.raises(WorldBankResponseError, match="list with 0 elements"):
+        client.get_countries()
+
+
+def test_get_source_concepts_parses_advanced_api_object() -> None:
+    payload = {
+        "page": 1,
+        "pages": 1,
+        "per_page": 1000,
+        "total": 4,
+        "source": [
+            {
+                "id": "6",
+                "name": "International Debt Statistics",
+                "concept": [
+                    {"id": "Country", "value": "Country"},
+                    {"id": "Series", "value": "Series"},
+                    {"id": "Counterpart-Area", "value": "Counterpart Area"},
+                    {"id": "Time", "value": "Time"},
+                ],
+            }
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/sources/6/concepts/data"
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    concepts = client.get_source_concepts(6)
+
+    assert [item["id"] for item in concepts] == [
+        "Country",
+        "Series",
+        "Counterpart-Area",
+        "Time",
+    ]
+    assert concepts[0]["source"]["id"] == "6"
+
+
+def test_get_source_variables_parses_series_catalog() -> None:
+    payload = {
+        "page": 1,
+        "pages": 1,
+        "per_page": 1000,
+        "total": 1,
+        "source": [
+            {
+                "id": "6",
+                "name": "International Debt Statistics",
+                "concept": [
+                    {
+                        "id": "Series",
+                        "name": "series",
+                        "variable": [
+                            {"id": "DT.DOD.DECT.CD", "value": "External debt stocks, total"}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/sources/6/series/data"
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    series = client.get_source_variables(6, "Series")
+
+    assert series[0]["id"] == "DT.DOD.DECT.CD"
+    assert series[0]["source"]["value"] == "International Debt Statistics"
+
+
+def test_get_advanced_data_builds_multidimensional_request() -> None:
+    payload = {
+        "page": 1,
+        "pages": 1,
+        "per_page": 1000,
+        "total": 1,
+        "source": {
+            "id": "6",
+            "name": "International Debt Statistics",
+            "data": [
+                {
+                    "variable": [
+                        {"concept": "Country", "id": "ARG", "value": "Argentina"},
+                        {
+                            "concept": "Series",
+                            "id": "DT.DOD.DECT.CD",
+                            "value": "External debt stocks, total",
+                        },
+                        {
+                            "concept": "Counterpart-Area",
+                            "id": "WLD",
+                            "value": "World",
+                        },
+                        {"concept": "Time", "id": "YR2023", "value": "2023"},
+                    ],
+                    "value": 123.0,
+                }
+            ],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == (
+            "/v2/sources/6/country/ARG/series/DT.DOD.DECT.CD/counterpart-area/WLD/time/YR2023/data"
+        )
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    records = client.get_advanced_data(
+        source_id=6,
+        dimensions={
+            "Country": ["ARG"],
+            "Series": ["DT.DOD.DECT.CD"],
+            "Counterpart-Area": ["WLD"],
+            "Time": ["YR2023"],
+        },
+    )
+
+    assert len(records) == 1
+    assert records[0]["value"] == 123.0
