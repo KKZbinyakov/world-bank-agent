@@ -1,33 +1,33 @@
-source_id: 2  # Default source for registry entries without an explicit source_id.
+source_id: 2  # Default source for entries without an explicit source_id.
 
-# This file is a semantic registry and the default indicator selection.
-# It is NOT an allowlist: `wb-insight ingest --indicators CODE1,6:CODE2` may use
-# indicators from any World Bank source. Each registry entry may override source_id.
-# Unknown unqualified codes are auto-resolved only when exactly one source exposes
-# them; ambiguous codes must be written as SOURCE_ID:INDICATOR_CODE.
-# Missing units remain null instead of being guessed.
+# Semantic registry for project metrics.
+# This registry is an enrichment layer, not an allowlist: arbitrary World Bank
+# indicators can still be requested explicitly. Registered indicators receive
+# stable aliases, categories, Russian labels and display units.
+#
+# `enabled` only controls the default selection when --indicators is omitted.
 indicators:
   - code: NY.GDP.PCAP.CD
     alias: gdp_per_capita
-    name_ru: ВВП на душу населения, текущие доллары США
+    name_ru: "ВВП на душу населения, текущие доллары США"
     category: economy
     role: target
     enabled: true
     unit: current_usd_per_person
-    display_unit: US$ / person
+    display_unit: "US$ / person"
 
   - code: SP.POP.TOTL
     alias: population
-    name_ru: Численность населения
+    name_ru: "Численность населения"
     category: demographics
     role: context
     enabled: true
     unit: people
-    display_unit: people
+    display_unit: "people"
 
   - code: SP.URB.TOTL.IN.ZS
     alias: urban_population_share
-    name_ru: Доля городского населения
+    name_ru: "Доля городского населения"
     category: demographics
     role: feature
     enabled: true
@@ -36,7 +36,7 @@ indicators:
 
   - code: EG.ELC.ACCS.ZS
     alias: electricity_access
-    name_ru: Доступ к электричеству
+    name_ru: "Доступ к электричеству"
     category: infrastructure
     role: feature
     enabled: true
@@ -45,25 +45,25 @@ indicators:
 
   - code: EG.USE.ELEC.KH.PC
     alias: electricity_use_per_capita
-    name_ru: Потребление электроэнергии на душу населения
+    name_ru: "Потребление электроэнергии на душу населения"
     category: energy
     role: feature
     enabled: true
     unit: kwh_per_person
-    display_unit: kWh / person
+    display_unit: "kWh / person"
 
   - code: EN.GHG.CO2.MT.CE.AR5
     alias: co2_emissions
-    name_ru: Выбросы CO2, всего, без LULUCF
-    category: ecology
+    name_ru: "Выбросы CO2, всего, без LULUCF"
+    category: environment
     role: feature
     enabled: true
     unit: mt_co2e
-    display_unit: Mt CO2e
+    display_unit: "Mt CO2e"
 
   - code: SE.XPD.TOTL.GD.ZS
     alias: education_expenditure_share
-    name_ru: Государственные расходы на образование
+    name_ru: "Государственные расходы на образование"
     category: education
     role: feature
     enabled: true
@@ -72,9 +72,430 @@ indicators:
 
   - code: SE.ADT.LITR.ZS
     alias: adult_literacy_rate
-    name_ru: Уровень грамотности взрослого населения
+    name_ru: "Уровень грамотности взрослого населения"
     category: education
     role: feature
     enabled: false
     unit: percent_of_population_age_15_plus
     display_unit: "%"
+
+  - code: NY.GDP.MKTP.CD
+    alias: gdp_current_usd
+    name_ru: "ВВП, текущие доллары США"
+    category: economy
+    role: feature
+    enabled: false
+    unit: current_usd
+    display_unit: "US$"
+
+  - code: SL.UEM.TOTL.ZS
+    alias: unemployment_pct_labor_force
+    name_ru: "Безработица, всего"
+    category: labor
+    role: feature
+    enabled: false
+    unit: percent_of_labor_force
+    display_unit: "%"
+
+  - code: HD.HCI.OVRL
+    alias: hci_proxy_0_1_not_hdi
+    name_ru: "Индекс человеческого капитала"
+    category: human_capital
+    role: feature
+    enabled: false
+    unit: index_0_1
+    display_unit: "0–1"
+    source_id: 63
+
+  - code: GC.XPN.TOTL.GD.ZS
+    alias: government_expense_pct_gdp
+    name_ru: "Государственные расходы"
+    category: public_finance
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: SI.POV.NAHC
+    alias: poverty_national_pct_population
+    name_ru: "Доля населения за национальной чертой бедности"
+    category: poverty_inequality
+    role: feature
+    enabled: false
+    unit: percent_of_population
+    display_unit: "%"
+
+  - code: SI.POV.GINI
+    alias: gini_index_0_100
+    name_ru: "Индекс Джини"
+    category: poverty_inequality
+    role: feature
+    enabled: false
+    unit: index_0_100
+    display_unit: "0–100"
+
+  - code: SP.DYN.TFRT.IN
+    alias: fertility_births_per_woman
+    name_ru: "Коэффициент рождаемости"
+    category: demographics
+    role: feature
+    enabled: false
+    unit: births_per_woman
+    display_unit: "births / woman"
+
+  - code: SP.DYN.LE00.IN
+    alias: life_expectancy_years
+    name_ru: "Ожидаемая продолжительность жизни при рождении"
+    category: health
+    role: feature
+    enabled: false
+    unit: years
+    display_unit: "years"
+
+  - code: FB.ATM.TOTL.P5
+    alias: atms_per_100k_adults
+    name_ru: "Банкоматы на 100 тысяч взрослых"
+    category: financial_access
+    role: feature
+    enabled: false
+    unit: per_100k_adults
+    display_unit: "per 100k adults"
+
+  - code: SL.TLF.TOTL.IN
+    alias: labor_force_total
+    name_ru: "Численность рабочей силы"
+    category: labor
+    role: feature
+    enabled: false
+    unit: people
+    display_unit: "people"
+
+  - code: NE.EXP.GNFS.CD
+    alias: exports_current_usd
+    name_ru: "Экспорт товаров и услуг"
+    category: external_sector
+    role: feature
+    enabled: false
+    unit: current_usd
+    display_unit: "US$"
+
+  - code: NE.IMP.GNFS.CD
+    alias: imports_current_usd
+    name_ru: "Импорт товаров и услуг"
+    category: external_sector
+    role: feature
+    enabled: false
+    unit: current_usd
+    display_unit: "US$"
+
+  - code: GC.DOD.TOTL.GD.ZS
+    alias: central_government_debt_pct_gdp
+    name_ru: "Долг центрального правительства"
+    category: public_finance
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: PA.NUS.FCRF
+    alias: official_exchange_rate_lcu_per_usd
+    name_ru: "Официальный обменный курс"
+    category: economy
+    role: feature
+    enabled: false
+    unit: lcu_per_usd
+    display_unit: "LCU / US$"
+
+  - code: NY.GDP.MKTP.KD.ZG
+    alias: gdp_growth_annual_pct
+    name_ru: "Рост ВВП"
+    category: economy
+    role: feature
+    enabled: false
+    unit: percent_annual
+    display_unit: "%"
+
+  - code: NY.GDP.PCAP.KD
+    alias: gdp_per_capita_constant_2015_usd
+    name_ru: "ВВП на душу населения, постоянные доллары 2015 года"
+    category: economy
+    role: feature
+    enabled: false
+    unit: constant_2015_usd_per_person
+    display_unit: "2015 US$ / person"
+
+  - code: FP.CPI.TOTL.ZG
+    alias: inflation_cpi_annual_pct
+    name_ru: "Инфляция по индексу потребительских цен"
+    category: economy
+    role: feature
+    enabled: false
+    unit: percent_annual
+    display_unit: "%"
+
+  - code: NE.TRD.GNFS.ZS
+    alias: trade_pct_gdp
+    name_ru: "Внешняя торговля"
+    category: external_sector
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: BN.CAB.XOKA.GD.ZS
+    alias: current_account_balance_pct_gdp
+    name_ru: "Сальдо текущего счёта"
+    category: external_sector
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: BX.KLT.DINV.WD.GD.ZS
+    alias: fdi_net_inflows_pct_gdp
+    name_ru: "Прямые иностранные инвестиции, чистый приток"
+    category: external_sector
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: NE.GDI.TOTL.ZS
+    alias: gross_capital_formation_pct_gdp
+    name_ru: "Валовое накопление капитала"
+    category: investment
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: NE.CON.GOVT.ZS
+    alias: government_consumption_pct_gdp
+    name_ru: "Конечное потребление государственного сектора"
+    category: public_finance
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: SL.TLF.CACT.ZS
+    alias: labor_force_participation_pct
+    name_ru: "Уровень участия в рабочей силе"
+    category: labor
+    role: feature
+    enabled: false
+    unit: percent_of_population_age_15_plus
+    display_unit: "%"
+
+  - code: SL.EMP.TOTL.SP.ZS
+    alias: employment_to_population_pct
+    name_ru: "Занятость к населению, 15+"
+    category: labor
+    role: feature
+    enabled: false
+    unit: percent_of_population_age_15_plus
+    display_unit: "%"
+
+  - code: IT.NET.USER.ZS
+    alias: internet_users_pct_population
+    name_ru: "Пользователи интернета"
+    category: digitalization
+    role: feature
+    enabled: false
+    unit: percent_of_population
+    display_unit: "%"
+
+  - code: SI.POV.DDAY
+    alias: poverty_3usd_2021ppp_pct_population
+    name_ru: "Бедность менее 3 долларов в день по ППС 2021 года"
+    category: poverty_inequality
+    role: feature
+    enabled: false
+    unit: percent_of_population
+    display_unit: "%"
+
+  - code: SP.POP.GROW
+    alias: population_growth_annual_pct
+    name_ru: "Рост населения"
+    category: demographics
+    role: feature
+    enabled: false
+    unit: percent_annual
+    display_unit: "%"
+
+  - code: SP.POP.65UP.TO.ZS
+    alias: population_age_65plus_pct
+    name_ru: "Население в возрасте 65 лет и старше"
+    category: demographics
+    role: feature
+    enabled: false
+    unit: percent_of_population
+    display_unit: "%"
+
+  - code: SL.UEM.1524.ZS
+    alias: youth_unemployment_pct
+    name_ru: "Безработица среди молодёжи 15–24 лет"
+    category: labor
+    role: feature
+    enabled: false
+    unit: percent_of_youth_labor_force
+    display_unit: "%"
+
+  - code: FI.RES.TOTL.CD
+    alias: total_reserves_including_gold_current_usd
+    name_ru: "Международные резервы, включая золото"
+    category: finance
+    role: feature
+    enabled: false
+    unit: current_usd
+    display_unit: "US$"
+
+  - code: FS.AST.PRVT.GD.ZS
+    alias: domestic_credit_private_sector_pct_gdp
+    name_ru: "Внутренний кредит частному сектору"
+    category: finance
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: FM.LBL.BMNY.GD.ZS
+    alias: broad_money_pct_gdp
+    name_ru: "Широкая денежная масса"
+    category: finance
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: SH.XPD.CHEX.GD.ZS
+    alias: health_expenditure_pct_gdp
+    name_ru: "Текущие расходы на здравоохранение"
+    category: health
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: SE.TER.ENRR
+    alias: tertiary_enrollment_gross_pct
+    name_ru: "Охват высшим образованием, валовой коэффициент"
+    category: education
+    role: feature
+    enabled: false
+    unit: percent_gross
+    display_unit: "%"
+
+  - code: GB.XPD.RSDV.GD.ZS
+    alias: research_development_expenditure_pct_gdp
+    name_ru: "Расходы на исследования и разработки"
+    category: science
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: EG.FEC.RNEW.ZS
+    alias: renewable_energy_consumption_pct
+    name_ru: "Доля возобновляемой энергии в конечном энергопотреблении"
+    category: energy
+    role: feature
+    enabled: false
+    unit: percent_of_total_final_energy_consumption
+    display_unit: "%"
+
+  - code: EN.GHG.CO2.PC.CE.AR5
+    alias: co2_excluding_lulucf_tons_per_capita
+    name_ru: "Выбросы CO2 без LULUCF на душу населения"
+    category: environment
+    role: feature
+    enabled: false
+    unit: tons_co2e_per_person
+    display_unit: "t CO2e / person"
+
+  - code: NV.AGR.TOTL.ZS
+    alias: agriculture_value_added_pct_gdp
+    name_ru: "Сельское хозяйство, добавленная стоимость"
+    category: economic_structure
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: NV.IND.TOTL.ZS
+    alias: industry_value_added_pct_gdp
+    name_ru: "Промышленность, добавленная стоимость"
+    category: economic_structure
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: NV.SRV.TOTL.ZS
+    alias: services_value_added_pct_gdp
+    name_ru: "Услуги, добавленная стоимость"
+    category: economic_structure
+    role: feature
+    enabled: false
+    unit: percent_of_gdp
+    display_unit: "% of GDP"
+
+  - code: GOV_WGI_CC.EST
+    alias: control_of_corruption_estimate
+    name_ru: "Контроль коррупции"
+    category: governance
+    role: feature
+    enabled: false
+    unit: governance_estimate
+    display_unit: "estimate"
+    source_id: 3
+
+  - code: GOV_WGI_GE.EST
+    alias: government_effectiveness_estimate
+    name_ru: "Эффективность правительства"
+    category: governance
+    role: feature
+    enabled: false
+    unit: governance_estimate
+    display_unit: "estimate"
+    source_id: 3
+
+  - code: GOV_WGI_PV.EST
+    alias: political_stability_estimate
+    name_ru: "Политическая стабильность и отсутствие насилия"
+    category: governance
+    role: feature
+    enabled: false
+    unit: governance_estimate
+    display_unit: "estimate"
+    source_id: 3
+
+  - code: GOV_WGI_RQ.EST
+    alias: regulatory_quality_estimate
+    name_ru: "Качество регулирования"
+    category: governance
+    role: feature
+    enabled: false
+    unit: governance_estimate
+    display_unit: "estimate"
+    source_id: 3
+
+  - code: GOV_WGI_RL.EST
+    alias: rule_of_law_estimate
+    name_ru: "Верховенство закона"
+    category: governance
+    role: feature
+    enabled: false
+    unit: governance_estimate
+    display_unit: "estimate"
+    source_id: 3
+
+  - code: GOV_WGI_VA.EST
+    alias: voice_and_accountability_estimate
+    name_ru: "Голос и подотчётность"
+    category: governance
+    role: feature
+    enabled: false
+    unit: governance_estimate
+    display_unit: "estimate"
+    source_id: 3

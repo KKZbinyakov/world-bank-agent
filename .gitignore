@@ -33,8 +33,10 @@ dist/
 # Data
 data/raw/*
 data/processed/*
+data/marts/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/marts/.gitkeep
 
 # IDE
 .vscode/

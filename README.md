@@ -350,3 +350,67 @@ Yandex Cloud AI Studio agent
 - `tests/fixtures/` коммитятся, так как используются для изолированных тестов;
 - перед коммитом рекомендуется запускать Ruff, mypy и pytest;
 - крупные функциональные этапы оформляются отдельными коммитами или pull request.
+
+## Универсальные витрины для DataLens
+
+После любого успешного `ingest` processed-run можно преобразовать в CSV без изменения Python-кода:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\export_datalens_csv.py `
+  --run-dir "data\processed\run_id=<RUN_ID>" `
+  --output-dir "data\marts\run_id=<RUN_ID>"
+```
+
+Создаются четыре артефакта:
+
+```text
+data/marts/run_id=<RUN_ID>/
+├── worldbank_datalens_wide.csv
+├── worldbank_datalens_long.csv
+├── worldbank_metric_catalog.csv
+└── mart_manifest.json
+```
+
+Builder не содержит списка конкретных стран или индикаторов:
+
+- зарегистрированный indicator использует `alias` из semantic registry;
+- незарегистрированный indicator получает стабильное техническое имя `s<SOURCE>_<CODE>`;
+- один и тот же code из разных sources не смешивается;
+- дополнительные source dimensions сохраняются в long mart и превращаются в отдельные wide-колонки;
+- никакая многомерная серия не агрегируется молча;
+- список стран и период определяются содержимым конкретного ingestion-run.
+
+Можно дополнительно фильтровать run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\export_datalens_csv.py `
+  --run-dir "data\processed\run_id=<RUN_ID>" `
+  --output-dir "data\marts\subset" `
+  --countries DEU,NLD,POL `
+  --indicators gdp_per_capita,SL.UEM.TOTL.ZS,6:DT.DOD.DECT.CD `
+  --start-year 2015 `
+  --end-year 2024
+```
+
+Для бизнес-названий, локализованных названий стран и производных метрик можно передать
+необязательный config:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\export_datalens_csv.py `
+  --run-dir "data\processed\run_id=<RUN_ID>" `
+  --output-dir "data\marts\run_id=<RUN_ID>" `
+  --config configs\marts.example.yaml
+```
+
+`configs/marts.example.yaml` показывает поддерживаемые поля `column_aliases`,
+`country_labels` и `derived_metrics`. Формулы derived metrics ограничены безопасной
+арифметикой над уже построенными wide-колонками и не используют `eval`.
+
+По умолчанию дополнительные dimensions кодируются в именах wide-колонок. Чтобы вместо
+этого блокировать multidimensional runs:
+
+```text
+--dimension-mode error
+```
+
+CSV сохраняются в `utf-8-sig`, а `data/marts/*` исключен из Git так же, как raw/processed данные.

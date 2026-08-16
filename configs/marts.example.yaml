@@ -1,0 +1,22 @@
+# Optional presentation layer for the universal mart builder.
+# The builder works without this file. Use it only when you want stable business
+# aliases, translated country labels, or derived metrics.
+
+column_aliases:
+  "2:NY.GDP.MKTP.CD": gdp_current_usd
+  "2:NY.GDP.PCAP.CD": gdp_per_capita_current_usd
+  "2:SL.UEM.TOTL.ZS": unemployment_pct_labor_force
+  "2:SL.TLF.TOTL.IN": labor_force_total
+
+country_label_column: country_ru
+country_labels:
+  DEU: Германия
+  NLD: Нидерланды
+  POL: Польша
+
+# Expressions are deliberately limited to safe arithmetic over wide-mart columns:
+# +, -, *, /, %, **, unary +/-, parentheses and numeric constants.
+derived_metrics:
+  - name: employed_derived_total
+    expression: "labor_force_total * (1 - unemployment_pct_labor_force / 100)"
+    round: 0

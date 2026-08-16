@@ -241,3 +241,34 @@ def test_indicator_registry_allows_same_code_in_different_sources() -> None:
     )
 
     assert len(registry.indicators) == 2
+
+
+def test_indicator_registry_accepts_underscore_in_world_bank_code() -> None:
+    registry = IndicatorRegistry.model_validate(
+        {
+            "source_id": 2,
+            "indicators": [
+                {
+                    "code": "NY.GDP.PCAP.CD",
+                    "alias": "gdp_per_capita",
+                    "name_ru": "GDP per capita",
+                    "category": "economy",
+                    "role": "target",
+                    "enabled": True,
+                },
+                {
+                    "code": "GOV_WGI_CC.EST",
+                    "alias": "control_of_corruption_estimate",
+                    "name_ru": "Control of Corruption",
+                    "category": "governance",
+                    "role": "feature",
+                    "enabled": False,
+                    "source_id": 3,
+                },
+            ],
+        }
+    )
+
+    governance = registry.indicators[1]
+    assert governance.code == "GOV_WGI_CC.EST"
+    assert registry.effective_source_id(governance) == 3

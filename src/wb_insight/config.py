@@ -174,7 +174,7 @@ class IndicatorSpec(StrictConfigModel):
     aliases, categories and display units.
     """
 
-    code: str = Field(pattern=r"^[A-Z0-9][A-Z0-9.]*$")
+    code: str = Field(pattern=r"^[A-Z0-9][A-Z0-9._]*$")
     alias: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     name_ru: str = Field(min_length=1)
     category: str = Field(pattern=r"^[a-z][a-z0-9_]*$")

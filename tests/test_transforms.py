@@ -5,7 +5,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from wb_insight.config import load_indicator_registry
+import pandas as pd
+
+from wb_insight.config import IndicatorRegistry, load_indicator_registry
 from wb_insight.transforms import (
     enrich_observations_with_indicator_semantics,
     normalize_advanced_observations,
@@ -77,14 +79,39 @@ def test_normalize_indicators_applies_registry_semantics() -> None:
 
 
 def test_unregistered_indicator_uses_source_metadata_without_guessing_unit() -> None:
-    registry = load_indicator_registry(ROOT / "configs/indicators.yaml")
+    registry = IndicatorRegistry.model_validate(
+        {
+            "source_id": 2,
+            "indicators": [
+                {
+                    "code": "NY.GDP.PCAP.CD",
+                    "alias": "gdp_per_capita",
+                    "name_ru": "ВВП на душу населения",
+                    "category": "economy",
+                    "role": "target",
+                    "enabled": True,
+                    "unit": "current_usd_per_person",
+                    "display_unit": "US$ / person",
+                }
+            ],
+        }
+    )
+
     records = [
         {
             "id": "SL.UEM.TOTL.ZS",
             "name": "Unemployment, total (% of total labor force)",
             "unit": "",
-            "source": {"id": "2", "value": "World Development Indicators"},
-            "topics": [{"id": "10", "value": "Social Protection & Labor"}],
+            "source": {
+                "id": "2",
+                "value": "World Development Indicators",
+            },
+            "topics": [
+                {
+                    "id": "10",
+                    "value": "Social Protection & Labor",
+                }
+            ],
         }
     ]
 
@@ -94,13 +121,16 @@ def test_unregistered_indicator_uses_source_metadata_without_guessing_unit() -> 
         loaded_at=LOADED_AT,
         registry=registry,
     )
+
     indicator = frame.iloc[0]
 
     assert bool(indicator["is_registered"]) is False
+    assert pd.isna(indicator["alias"])
+    assert pd.isna(indicator["unit"])
+    assert pd.isna(indicator["display_unit"])
+    assert indicator["unit_source"] == "missing"
     assert indicator["category"] == "social_protection_labor"
     assert indicator["category_source"] == "world_bank_topic"
-    assert indicator["unit_source"] == "missing"
-    assert bool(frame["unit"].isna().iloc[0]) is True
 
 
 def test_normalize_observations_keeps_missing_values_as_null() -> None:

@@ -1,0 +1,116 @@
+# DataLens presentation configuration for the main World Bank analytical dataset.
+#
+# This file does not restrict ingestion. It only assigns stable business column
+# names, Russian country labels and project-level derived metrics when building marts.
+
+column_aliases:
+  "2:NY.GDP.MKTP.CD": gdp_current_usd
+  "2:NY.GDP.PCAP.CD": gdp_per_capita_current_usd
+  "2:SL.UEM.TOTL.ZS": unemployment_pct_labor_force
+  "63:HD.HCI.OVRL": hci_proxy_0_1_not_hdi
+  "2:SP.URB.TOTL.IN.ZS": urban_population_pct
+  "2:GC.XPN.TOTL.GD.ZS": government_expense_pct_gdp
+  "2:SI.POV.NAHC": poverty_national_pct_population
+  "2:SI.POV.GINI": gini_index_0_100
+  "2:SP.DYN.TFRT.IN": fertility_births_per_woman
+  "2:SP.DYN.LE00.IN": life_expectancy_years
+  "2:FB.ATM.TOTL.P5": atms_per_100k_adults
+  "2:SL.TLF.TOTL.IN": labor_force_total
+  "2:NE.EXP.GNFS.CD": exports_current_usd
+  "2:NE.IMP.GNFS.CD": imports_current_usd
+  "2:GC.DOD.TOTL.GD.ZS": central_government_debt_pct_gdp
+  "2:PA.NUS.FCRF": official_exchange_rate_lcu_per_usd
+  "2:SP.POP.TOTL": population_total
+  "2:NY.GDP.MKTP.KD.ZG": gdp_growth_annual_pct
+  "2:NY.GDP.PCAP.KD": gdp_per_capita_constant_2015_usd
+  "2:FP.CPI.TOTL.ZG": inflation_cpi_annual_pct
+  "2:NE.TRD.GNFS.ZS": trade_pct_gdp
+  "2:BN.CAB.XOKA.GD.ZS": current_account_balance_pct_gdp
+  "2:BX.KLT.DINV.WD.GD.ZS": fdi_net_inflows_pct_gdp
+  "2:NE.GDI.TOTL.ZS": gross_capital_formation_pct_gdp
+  "2:NE.CON.GOVT.ZS": government_consumption_pct_gdp
+  "2:SL.TLF.CACT.ZS": labor_force_participation_pct
+  "2:SL.EMP.TOTL.SP.ZS": employment_to_population_pct
+  "2:IT.NET.USER.ZS": internet_users_pct_population
+  "2:EG.ELC.ACCS.ZS": access_to_electricity_pct_population
+  "2:SI.POV.DDAY": poverty_3usd_2021ppp_pct_population
+  "2:SP.POP.GROW": population_growth_annual_pct
+  "2:SP.POP.65UP.TO.ZS": population_age_65plus_pct
+  "2:SL.UEM.1524.ZS": youth_unemployment_pct
+  "2:FI.RES.TOTL.CD": total_reserves_including_gold_current_usd
+  "2:FS.AST.PRVT.GD.ZS": domestic_credit_private_sector_pct_gdp
+  "2:FM.LBL.BMNY.GD.ZS": broad_money_pct_gdp
+  "2:SH.XPD.CHEX.GD.ZS": health_expenditure_pct_gdp
+  "2:SE.TER.ENRR": tertiary_enrollment_gross_pct
+  "2:GB.XPD.RSDV.GD.ZS": research_development_expenditure_pct_gdp
+  "2:EG.FEC.RNEW.ZS": renewable_energy_consumption_pct
+  "2:EN.GHG.CO2.PC.CE.AR5": co2_excluding_lulucf_tons_per_capita
+  "2:NV.AGR.TOTL.ZS": agriculture_value_added_pct_gdp
+  "2:NV.IND.TOTL.ZS": industry_value_added_pct_gdp
+  "2:NV.SRV.TOTL.ZS": services_value_added_pct_gdp
+  "3:GOV_WGI_CC.EST": control_of_corruption_estimate
+  "3:GOV_WGI_GE.EST": government_effectiveness_estimate
+  "3:GOV_WGI_PV.EST": political_stability_estimate
+  "3:GOV_WGI_RQ.EST": regulatory_quality_estimate
+  "3:GOV_WGI_RL.EST": rule_of_law_estimate
+  "3:GOV_WGI_VA.EST": voice_and_accountability_estimate
+
+country_label_column: country_ru
+country_labels:
+  ARE: ОАЭ
+  ARG: Аргентина
+  AUS: Австралия
+  BGD: Бангладеш
+  BRA: Бразилия
+  CAN: Канада
+  CHL: Чили
+  CHN: Китай
+  COL: Колумбия
+  CRI: Коста-Рика
+  DEU: Германия
+  EGY: Египет
+  ESP: Испания
+  ETH: Эфиопия
+  FRA: Франция
+  GBR: Великобритания
+  GEO: Грузия
+  GHA: Гана
+  IDN: Индонезия
+  IND: Индия
+  ISR: Израиль
+  ITA: Италия
+  JPN: Япония
+  KAZ: Казахстан
+  KEN: Кения
+  KOR: Южная Корея
+  LKA: Шри-Ланка
+  MAR: Марокко
+  MEX: Мексика
+  MWI: Малави
+  MYS: Малайзия
+  NGA: Нигерия
+  NPL: Непал
+  PAK: Пакистан
+  PER: Перу
+  PHL: Филиппины
+  POL: Польша
+  RUS: Россия
+  RWA: Руанда
+  SAU: Саудовская Аравия
+  SEN: Сенегал
+  SWE: Швеция
+  THA: Таиланд
+  TUR: Турция
+  TZA: Танзания
+  UGA: Уганда
+  UKR: Украина
+  USA: США
+  VNM: Вьетнам
+  ZAF: ЮАР
+
+# Derived metrics are evaluated after the wide mart is built.
+# Only safe arithmetic over existing mart columns is supported.
+derived_metrics:
+  - name: employed_derived_total
+    expression: "labor_force_total * (1 - unemployment_pct_labor_force / 100)"
+    round: 0
