@@ -52,11 +52,12 @@ class AppSettings(BaseSettings):
     indicators_config_path: Path = Path("configs/indicators.yaml")
     country_groups_config_path: Path = Path("configs/country_groups.yaml")
 
-    clickhouse_host: str | None = None
+    clickhouse_host: str | None = "localhost"
     clickhouse_port: int = Field(default=8123, ge=1, le=65535)
-    clickhouse_database: str = "wb_insight"
-    clickhouse_user: str | None = None
+    clickhouse_database: str = Field(default="wb_insight", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    clickhouse_user: str | None = "wb_insight"
     clickhouse_password: str | None = None
+    clickhouse_secure: bool = False
 
     s3_endpoint: str | None = None
     s3_bucket: str | None = None

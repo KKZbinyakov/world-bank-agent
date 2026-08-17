@@ -164,3 +164,53 @@ Secrets                     → Yandex Lockbox
 ```
 
 Следующий архитектурный этап — вынести persistent storage в Object Storage/ClickHouse, не меняя уже протестированные transformations и quality rules.
+
+## ClickHouse analytical storage
+
+Локальный и managed-вариант используют одну и ту же логическую модель.
+
+```text
+Processed Parquet
+      ↓
+ClickHouse loader
+      ↓
+┌─────────────────────────────┐
+│ etl_run                     │
+│ dim_country                 │
+│ dim_indicator               │
+│ fact_observation            │
+└─────────────────────────────┘
+      ↓
+SQL views / Gold tables
+      ↓
+┌─────────────────────────────┐
+│ mart_indicator_timeseries   │
+│ mart_country_snapshot       │
+│ mart_data_quality           │
+│ mart_country_year           │
+│ mart_country_year_wide      │
+│ mart_metric_catalog         │
+└─────────────────────────────┘
+      ↓
+DataLens + analytical tools
+```
+
+Silver-таблицы сохраняют `run_id`, поэтому можно загружать несколько исторических
+snapshot-ов без перезаписи предыдущих данных. SQL views выбирают последний run со
+статусом `loaded`. Повторная загрузка того же `run_id` идемпотентна: loader сначала
+удаляет только строки этого run, а затем загружает его заново.
+
+`mart_country_year_wide` и `mart_metric_catalog` являются текущими presentation marts.
+Они создаются динамически из файлов, построенных универсальным mart builder. Замена
+происходит через staging table и `RENAME TABLE`, чтобы DataLens не видел частично
+загруженную таблицу.
+
+Локальная разработка использует `docker-compose.yml`; подключение Python выполняется
+официальным клиентом `clickhouse-connect` через HTTP-интерфейс. Для Managed ClickHouse
+меняются только `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, учетные данные и
+`CLICKHOUSE_SECURE`; код loader остается тем же.
+
+DataLens следует подключать отдельным read-only пользователем. Основным источником для
+существующего wide-дашборда является `mart_country_year_wide`; универсальные графики и
+будущие agent tools могут использовать `mart_indicator_timeseries`,
+`mart_country_snapshot` и `mart_data_quality`.

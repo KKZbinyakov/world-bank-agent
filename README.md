@@ -28,7 +28,7 @@ read-only analytical tools
 Yandex Cloud AI Studio agent
 ```
 
-Сейчас реализованы ingestion, Silver-слой, semantic registry и универсальные DataLens-витрины. ClickHouse, Airflow и LLM-агент будут добавлены следующими этапами.
+Сейчас реализованы ingestion, Silver-слой, semantic registry, универсальные DataLens-витрины и ClickHouse storage/loader. Airflow и LLM-агент будут добавлены следующими этапами.
 
 ---
 
@@ -53,7 +53,10 @@ Yandex Cloud AI Studio agent
 - каталог метрик и manifest;
 - presentation-конфиг `configs/marts.yaml`;
 - производные метрики;
-- unit/integration tests, Ruff и mypy.
+- unit/integration tests, Ruff и mypy;
+- локальный ClickHouse через Docker Compose;
+- загрузка Silver Parquet и Gold marts в ClickHouse;
+- SQL views для временных рядов, snapshot и data quality.
 
 ---
 
@@ -752,7 +755,147 @@ worldbank_datalens_wide.csv
 
 ---
 
-# 14. Проверка качества кода
+# 14. ClickHouse analytical storage
+
+## Локальный ClickHouse
+
+Для разработки используется Docker Compose с ClickHouse 26.7.1.
+
+Убедитесь, что в `.env` заданы параметры, соответствующие локальному compose:
+
+```dotenv
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DATABASE=wb_insight
+CLICKHOUSE_USER=wb_insight
+CLICKHOUSE_PASSWORD=wb_insight_local
+CLICKHOUSE_SECURE=false
+```
+
+Запустить ClickHouse:
+
+```powershell
+docker compose up -d clickhouse
+```
+
+Проверить состояние:
+
+```powershell
+docker compose ps
+```
+
+Посмотреть логи при необходимости:
+
+```powershell
+docker compose logs -f clickhouse
+```
+
+Остановить контейнер без удаления данных:
+
+```powershell
+docker compose stop clickhouse
+```
+
+Удалить контейнер и локальные ClickHouse volumes:
+
+```powershell
+docker compose down -v
+```
+
+## Загрузка processed run в ClickHouse
+
+Сначала убедитесь, что Gold CSV уже собраны для того же run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\export_datalens_csv.py `
+    --run-dir "data\processed\run_id=<RUN_ID>" `
+    --output-dir "data\marts\run_id=<RUN_ID>" `
+    --config "configs\marts.yaml"
+```
+
+Затем загрузите Silver + Gold:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\load_clickhouse.py `
+    --run-dir "data\processed\run_id=<RUN_ID>" `
+    --mart-dir "data\marts\run_id=<RUN_ID>"
+```
+
+Loader выполняет:
+
+1. проверку подключения;
+2. применение `sql/ddl/*.sql`;
+3. идемпотентную загрузку `dim_country`, `dim_indicator`, `fact_observation`;
+4. загрузку текущего wide mart в `mart_country_year_wide`;
+5. загрузку `mart_metric_catalog`;
+6. регистрацию run в `etl_run`;
+7. применение `sql/marts/*.sql`.
+
+Повторная загрузка того же `run_id` не создает дублей: строки конкретного run
+удаляются синхронно и загружаются заново.
+
+## Проверка ClickHouse
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_test_clickhouse.py
+```
+
+Ожидаются ненулевые значения для `runs`, `countries`, `indicators` и `observations`.
+Для основной витрины проекта `wide_rows` должен быть 1250.
+
+Основные таблицы:
+
+```text
+etl_run
+dim_country
+dim_indicator
+fact_observation
+mart_country_year_wide
+mart_metric_catalog
+```
+
+Основные SQL views:
+
+```text
+mart_indicator_timeseries
+mart_country_snapshot
+mart_data_quality
+mart_country_year
+```
+
+## Подключение DataLens к ClickHouse
+
+После локальной проверки тот же loader используется с Yandex Managed Service for
+ClickHouse. Для managed-кластера укажите в `.env` FQDN, пользователя, пароль,
+HTTPS-порт и включите TLS, например:
+
+```dotenv
+CLICKHOUSE_HOST=<clickhouse-host-fqdn>
+CLICKHOUSE_PORT=8443
+CLICKHOUSE_DATABASE=wb_insight
+CLICKHOUSE_USER=<loader-user>
+CLICKHOUSE_PASSWORD=<secret>
+CLICKHOUSE_SECURE=true
+```
+
+Для DataLens создайте отдельного read-only пользователя. Для существующего wide
+дашборда выберите таблицу:
+
+```text
+mart_country_year_wide
+```
+
+Для универсальных metric charts и будущих analytical tools используйте:
+
+```text
+mart_indicator_timeseries
+mart_country_snapshot
+mart_data_quality
+```
+
+---
+
+# 15. Проверка качества кода
 
 Перед коммитом:
 
@@ -771,7 +914,7 @@ make check
 
 ---
 
-# 15. Git и `.gitignore`
+# 16. Git и `.gitignore`
 
 В Git не должны попадать:
 
@@ -819,7 +962,7 @@ git check-ignore -v "data\marts\configured\worldbank_datalens_wide.csv"
 
 ---
 
-# 16. Troubleshooting
+# 17. Troubleshooting
 
 ## `No module named ...`
 
@@ -881,7 +1024,7 @@ Long-витрина содержит metadata-поля разных типов. 
 
 ---
 
-# 17. Структура проекта
+# 18. Структура проекта
 
 ```text
 wb-insight-agent/
@@ -903,7 +1046,13 @@ wb-insight-agent/
 │       └── cli.py
 │
 ├── scripts/
-│   └── export_datalens_csv.py
+│   ├── export_datalens_csv.py
+│   ├── load_clickhouse.py
+│   └── smoke_test_clickhouse.py
+│
+├── sql/
+│   ├── ddl/
+│   └── marts/
 │
 ├── data/
 │   ├── raw/
@@ -917,9 +1066,11 @@ wb-insight-agent/
 │   ├── test_transforms.py
 │   ├── test_quality.py
 │   ├── test_pipeline.py
-│   └── test_marts.py
+│   ├── test_marts.py
+│   └── test_clickhouse_storage.py
 │
 ├── docs/
+├── docker-compose.yml
 ├── README.md
 ├── pyproject.toml
 ├── requirements.txt
@@ -929,9 +1080,9 @@ wb-insight-agent/
 
 ---
 
-# 18. Следующие этапы
+# 19. Следующие этапы
 
-Текущий локальный data layer:
+Текущий data layer:
 
 ```text
 World Bank
@@ -941,22 +1092,24 @@ raw
 Silver Parquet
     ↓
 Gold DataLens CSV
+    ↓
+ClickHouse tables + SQL marts
+    ↓
+DataLens
 ```
 
 Следующие компоненты:
 
 ```text
-Yandex Object Storage
-        ↓
-Managed ClickHouse
-        ↓
-SQL Gold marts
-        ↓
-Yandex DataLens
+Yandex Object Storage / Managed ClickHouse deployment
         ↓
 read-only analytical tools
         ↓
+FastAPI Tool API
+        ↓
 Yandex Cloud AI Studio agent
+        ↓
+Airflow orchestration and scheduled refresh
 ```
 
 Бизнес-логика ingestion, нормализации и data-quality checks должна оставаться независимой от конкретной облачной инфраструктуры.
