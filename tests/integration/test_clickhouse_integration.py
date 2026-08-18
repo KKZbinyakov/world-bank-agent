@@ -7,6 +7,12 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from wb_insight.analytics import (
+    AnalyticalRepository,
+    calculate_correlation,
+    calculate_trend,
+    compare_countries,
+)
 from wb_insight.config import AppSettings
 from wb_insight.storage import ClickHouseRepository
 
@@ -295,3 +301,64 @@ def test_processed_run_loads_into_live_clickhouse(tmp_path: Path) -> None:
             == 8
         )
         assert repository.scalar("SELECT count() FROM mart_country_year_wide") == 4
+
+
+def test_analytical_core_queries_live_clickhouse(tmp_path: Path) -> None:
+    run_dir, mart_dir = _write_fixture(tmp_path)
+    with ClickHouseRepository.from_settings(_settings()) as storage:
+        storage.apply_sql_directory(ROOT / "sql" / "ddl")
+        storage.apply_sql_directory(ROOT / "sql" / "marts")
+        storage.load_processed_run(run_dir, mart_dir=mart_dir, batch_size=2)
+
+    with AnalyticalRepository.from_settings(_settings()) as repository:
+        gdp = repository.get_timeseries(
+            countries=["DEU", "NLD"],
+            metrics=["2:NY.GDP.PCAP.CD"],
+            start_year=2023,
+            end_year=2024,
+        )
+        assert len(gdp.points) == 4
+        assert all(item.coverage_ratio == 1 for item in gdp.coverage)
+
+        snapshot = repository.get_country_snapshot(
+            countries=["DEU", "NLD"],
+            metrics=["2:NY.GDP.PCAP.CD"],
+            mode="common_year",
+        )
+        assert snapshot.comparison_year == 2024
+        assert len(snapshot.points) == 2
+
+        missing_snapshot = repository.get_country_snapshot(
+            countries=["DEU", "POL"],
+            metrics=["2:NY.GDP.PCAP.CD"],
+            mode="common_year",
+        )
+        assert missing_snapshot.comparison_year is None
+        assert not missing_snapshot.points
+        assert len(missing_snapshot.missing_pairs) == 2
+
+        quality = repository.get_data_quality(
+            countries=["DEU", "NLD"],
+            metrics=["2:SL.UEM.TOTL.ZS"],
+        )
+        assert len(quality.entries) == 2
+        assert sum(entry.coverage_ratio < 1 for entry in quality.entries) == 1
+
+        unemployment = repository.get_timeseries(
+            countries=["DEU", "NLD"],
+            metrics=["2:SL.UEM.TOTL.ZS"],
+            start_year=2023,
+            end_year=2024,
+        )
+
+    deu_gdp = [point for point in gdp.points if point.country_code == "DEU"]
+    trend = calculate_trend(deu_gdp)
+    assert trend.absolute_change == pytest.approx(2_000.0)
+
+    comparison = compare_countries(gdp.points)
+    assert comparison.year == 2024
+    assert comparison.entries[0].country_code == "NLD"
+
+    correlation = calculate_correlation(gdp.points, unemployment.points)
+    assert correlation.sample_size == 3
+    assert correlation.coefficient is not None

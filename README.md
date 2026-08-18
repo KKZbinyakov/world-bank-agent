@@ -28,7 +28,7 @@ read-only analytical tools
 Yandex Cloud AI Studio agent
 ```
 
-Сейчас реализованы ingestion, Silver-слой, semantic registry, универсальные DataLens-витрины и ClickHouse storage/loader. Airflow и LLM-агент будут добавлены следующими этапами.
+Сейчас реализованы ingestion, Silver-слой, semantic registry, универсальные DataLens-витрины, ClickHouse storage/loader и детерминированный read-only analytical core. Tool API, Airflow и LLM-агент будут добавлены следующими этапами.
 
 ---
 
@@ -56,7 +56,9 @@ Yandex Cloud AI Studio agent
 - unit/integration tests, Ruff и mypy;
 - локальный ClickHouse через Docker Compose;
 - загрузка Silver Parquet и Gold marts в ClickHouse;
-- SQL views для временных рядов, snapshot и data quality.
+- SQL views для временных рядов, snapshot и data quality;
+- read-only `AnalyticalRepository`;
+- временные ряды, snapshot, тренды, сравнение стран, корреляции и quality analytics.
 
 ---
 
@@ -895,7 +897,244 @@ mart_data_quality
 
 ---
 
-# 15. Continuous Integration
+# 15. Analytical core
+
+Пакет:
+
+```text
+src/wb_insight/analytics/
+├── models.py
+├── repository.py
+├── statistics.py
+└── __init__.py
+```
+
+Analytical core работает только поверх ClickHouse marts и не принимает SQL от
+пользователя или будущей LLM. Публичный интерфейс repository предоставляет только
+заранее определённые read-only операции.
+
+## Подключение
+
+```python
+from wb_insight.analytics import AnalyticalRepository
+from wb_insight.config import get_settings
+
+settings = get_settings()
+with AnalyticalRepository.from_settings(settings) as repository:
+    result = repository.get_timeseries(
+        countries=["DEU", "NLD", "POL"],
+        metrics=["2:NY.GDP.PCAP.CD"],
+        start_year=2015,
+        end_year=2024,
+    )
+```
+
+Для production/Managed ClickHouse рекомендуется отдельный пользователь с правами
+только на `SELECT` для analytical marts.
+
+## Metric selectors
+
+Поддерживаются:
+
+```text
+gdp_per_capita
+NY.GDP.PCAP.CD
+2:NY.GDP.PCAP.CD
+```
+
+Для multidimensional series используется `MetricRequest`:
+
+```python
+from wb_insight.analytics import MetricRequest
+
+metric = MetricRequest(
+    selector="6:DT.DOD.DECT.CD",
+    dimensions={"Counterpart-Area": "WLD"},
+)
+```
+
+Если код встречается в нескольких sources, repository требует явный
+`SOURCE_ID:CODE`. Дополнительные dimensions никогда не агрегируются молча.
+
+## `get_timeseries`
+
+```python
+series = repository.get_timeseries(
+    countries=["DEU", "NLD"],
+    metrics=["2:NY.GDP.PCAP.CD", "2:SL.UEM.TOTL.ZS"],
+    start_year=2010,
+    end_year=2024,
+)
+```
+
+Результат содержит:
+
+- citable points с `run_id`, страной, годом, source и unit;
+- semantic metadata;
+- `dimensions_json`;
+- missing years;
+- coverage ratio для каждой country/metric series;
+- warnings без подмены null нулями.
+
+## `get_country_snapshot`
+
+Последнее доступное значение каждого ряда:
+
+```python
+snapshot = repository.get_country_snapshot(
+    countries=["DEU", "NLD"],
+    metrics=["2:NY.GDP.PCAP.CD", "2:SL.UEM.TOTL.ZS"],
+    mode="latest_available",
+)
+```
+
+Последний общий сопоставимый год:
+
+```python
+snapshot = repository.get_country_snapshot(
+    countries=["DEU", "NLD"],
+    metrics=["2:NY.GDP.PCAP.CD", "2:SL.UEM.TOTL.ZS"],
+    mode="common_year",
+)
+```
+
+Фиксированный год:
+
+```python
+snapshot = repository.get_country_snapshot(
+    countries=["DEU", "NLD"],
+    metrics=["2:NY.GDP.PCAP.CD"],
+    mode="year",
+    year=2023,
+)
+```
+
+`latest_available` может возвращать разные observation years. `common_year`
+используется для честного рейтинга стран.
+
+Analytical core работает с исходными source indicators из long ClickHouse marts. Производные
+колонки, существующие только в `mart_country_year_wide`, в этот PR не входят; их поддержка
+будет добавляться как отдельные детерминированные вычисления или зарегистрированные tools.
+
+## `calculate_trend`
+
+```python
+from wb_insight.analytics import calculate_trend
+
+country_points = [point for point in series.points if point.country_code == "DEU"]
+trend = calculate_trend(country_points)
+```
+
+Рассчитываются:
+
+- абсолютное изменение;
+- процентное изменение;
+- CAGR;
+- среднее абсолютное изменение в год;
+- slope линейного тренда;
+- волатильность annualized percentage changes;
+- число наблюдений и пропущенных лет;
+- ограничения расчёта в `warnings`.
+
+## `compare_countries`
+
+```python
+from wb_insight.analytics import compare_countries
+
+comparison = compare_countries(series.points)
+```
+
+Без `year` функция выбирает последний год с непустым значением для всех стран.
+Можно задать фиксированный год:
+
+```python
+comparison = compare_countries(series.points, year=2023)
+```
+
+Результат содержит mean, median, value rank и отклонение страны от mean/median.
+Rank означает порядок по числовому значению, а не автоматически «лучше/хуже».
+
+## `calculate_correlation`
+
+```python
+from wb_insight.analytics import calculate_correlation
+
+correlation = calculate_correlation(
+    gdp.points,
+    unemployment.points,
+    method="pearson",
+    min_observations=20,
+)
+```
+
+Поддерживаются:
+
+```text
+pearson
+spearman
+```
+
+Наблюдения сопоставляются по `country_code + year`. Результат обязательно
+содержит `sample_size`, число отброшенных пар, использованные страны/годы и
+предупреждение, что корреляция не доказывает причинность.
+
+## `get_data_quality`
+
+```python
+quality = repository.get_data_quality(
+    countries=["DEU", "NLD"],
+    metrics=["2:NY.GDP.PCAP.CD", "2:SL.UEM.TOTL.ZS"],
+)
+```
+
+Данные берутся из `mart_data_quality` и включают:
+
+- first/latest available year;
+- row/non-null/null counts;
+- expected years;
+- coverage ratio;
+- точный dimension slice.
+
+## Safety limits
+
+По умолчанию один repository request ограничен:
+
+```text
+50 countries
+20 metrics
+100 years
+50 000 returned rows
+```
+
+Лимиты можно уменьшить при создании repository. Все значения передаются в
+ClickHouse как bound parameters; вызывающий код не может задавать SQL или имя
+таблицы.
+
+## Live smoke-test
+
+После загрузки project run в ClickHouse:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_test_analytics.py
+```
+
+Скрипт проверяет:
+
+```text
+get_timeseries
+get_country_snapshot
+calculate_trend
+compare_countries
+calculate_correlation
+get_data_quality
+```
+
+Analytical core также проверяется в live ClickHouse integration job GitHub
+Actions на отдельной базе `wb_insight_ci`.
+
+---
+
+# 16. Continuous Integration
 
 Workflow:
 
@@ -992,7 +1231,7 @@ ClickHouse integration
 
 ---
 
-# 16. Проверка качества кода
+# 17. Проверка качества кода
 
 Перед коммитом:
 
@@ -1011,7 +1250,7 @@ make check
 
 ---
 
-# 17. Git и `.gitignore`
+# 18. Git и `.gitignore`
 
 В Git не должны попадать:
 
@@ -1059,7 +1298,7 @@ git check-ignore -v "data\marts\configured\worldbank_datalens_wide.csv"
 
 ---
 
-# 18. Troubleshooting
+# 19. Troubleshooting
 
 ## `No module named ...`
 
@@ -1121,7 +1360,7 @@ Long-витрина содержит metadata-поля разных типов. 
 
 ---
 
-# 19. Структура проекта
+# 20. Структура проекта
 
 ```text
 wb-insight-agent/
@@ -1138,6 +1377,7 @@ wb-insight-agent/
 │       ├── transforms/
 │       ├── quality/
 │       ├── marts/
+│       ├── analytics/
 │       ├── pipeline.py
 │       ├── config.py
 │       └── cli.py
@@ -1145,7 +1385,8 @@ wb-insight-agent/
 ├── scripts/
 │   ├── export_datalens_csv.py
 │   ├── load_clickhouse.py
-│   └── smoke_test_clickhouse.py
+│   ├── smoke_test_clickhouse.py
+│   └── smoke_test_analytics.py
 │
 ├── sql/
 │   ├── ddl/
@@ -1170,7 +1411,9 @@ wb-insight-agent/
 │   ├── test_quality.py
 │   ├── test_pipeline.py
 │   ├── test_marts.py
-│   └── test_clickhouse_storage.py
+│   ├── test_clickhouse_storage.py
+│   ├── test_analytical_repository.py
+│   └── test_analytical_statistics.py
 │
 ├── docs/
 ├── docker-compose.yml
@@ -1183,7 +1426,7 @@ wb-insight-agent/
 
 ---
 
-# 20. Следующие этапы
+# 21. Следующие этапы
 
 Текущий data layer:
 
