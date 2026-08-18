@@ -895,7 +895,104 @@ mart_data_quality
 
 ---
 
-# 15. Проверка качества кода
+# 15. Continuous Integration
+
+Workflow:
+
+```text
+.github/workflows/ci.yml
+```
+
+запускается для каждого pull request, push в `main` и вручную через
+`workflow_dispatch`.
+
+В CI есть два обязательных job.
+
+### `Quality`
+
+Проверяет:
+
+```text
+Ruff format
+Ruff lint
+mypy
+pytest + coverage >= 80%
+сборку Python package
+```
+
+Integration-тесты исключаются из этого job, поэтому он не зависит от внешних
+сервисов.
+
+### `ClickHouse integration`
+
+GitHub Actions поднимает отдельный контейнер ClickHouse и на синтетическом
+fixture проверяет полный контур:
+
+```text
+DDL
+  ↓
+Silver Parquet fixture
+  ↓
+ClickHouse loader
+  ↓
+SQL views
+  ↓
+wide mart + metric catalog
+  ↓
+idempotent reload
+```
+
+Тест не обращается к World Bank API и не использует реальные проектные данные.
+
+Локальный запуск только unit-тестов:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m "not integration"
+```
+
+Локальный integration-тест необходимо выполнять только против отдельной базы
+`wb_insight_test` или `wb_insight_ci`. Для уже запущенного Docker-контейнера сначала
+создайте тестовую базу:
+
+```powershell
+docker exec -it wb-insight-clickhouse clickhouse-client `
+    --user wb_insight `
+    --password wb_insight_local `
+    --query "CREATE DATABASE IF NOT EXISTS wb_insight_test"
+```
+
+Затем запустите тест:
+
+```powershell
+$env:RUN_CLICKHOUSE_INTEGRATION="1"
+$env:CLICKHOUSE_DATABASE="wb_insight_test"
+$env:CLICKHOUSE_HOST="localhost"
+$env:CLICKHOUSE_PORT="8123"
+$env:CLICKHOUSE_USER="wb_insight"
+$env:CLICKHOUSE_PASSWORD="wb_insight_local"
+$env:CLICKHOUSE_SECURE="false"
+
+.\.venv\Scripts\python.exe -m pytest `
+    tests\integration\test_clickhouse_integration.py `
+    -m integration `
+    --no-cov `
+    -vv
+```
+
+Integration-тест намеренно отказывается работать с основной локальной базой
+`wb_insight`, чтобы случайно не заменить её динамические Gold-таблицы.
+
+После успешного PR рекомендуется включить для ветки `main` branch protection и
+сделать обязательными проверки:
+
+```text
+Quality
+ClickHouse integration
+```
+
+---
+
+# 16. Проверка качества кода
 
 Перед коммитом:
 
@@ -914,7 +1011,7 @@ make check
 
 ---
 
-# 16. Git и `.gitignore`
+# 17. Git и `.gitignore`
 
 В Git не должны попадать:
 
@@ -962,7 +1059,7 @@ git check-ignore -v "data\marts\configured\worldbank_datalens_wide.csv"
 
 ---
 
-# 17. Troubleshooting
+# 18. Troubleshooting
 
 ## `No module named ...`
 
@@ -1024,7 +1121,7 @@ Long-витрина содержит metadata-поля разных типов. 
 
 ---
 
-# 18. Структура проекта
+# 19. Структура проекта
 
 ```text
 wb-insight-agent/
@@ -1059,8 +1156,14 @@ wb-insight-agent/
 │   ├── processed/
 │   └── marts/
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
 ├── tests/
 │   ├── fixtures/
+│   ├── integration/
+│   │   └── test_clickhouse_integration.py
 │   ├── test_world_bank_client.py
 │   ├── test_raw_store.py
 │   ├── test_transforms.py
@@ -1080,7 +1183,7 @@ wb-insight-agent/
 
 ---
 
-# 19. Следующие этапы
+# 20. Следующие этапы
 
 Текущий data layer:
 
