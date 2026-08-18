@@ -53,6 +53,9 @@ minversion = "8.3"
 addopts = "-ra --strict-config --strict-markers --cov=wb_insight --cov-report=term-missing"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "integration: tests that require live external services such as ClickHouse",
+]
 
 [tool.coverage.run]
 branch = true
