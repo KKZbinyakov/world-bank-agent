@@ -163,7 +163,7 @@ LLM orchestration           → Yandex Cloud AI Studio
 Secrets                     → Yandex Lockbox
 ```
 
-Следующий архитектурный этап — вынести persistent storage в Object Storage/ClickHouse, не меняя уже протестированные transformations и quality rules.
+Локальный ClickHouse-контур уже реализован. Следующий инфраструктурный этап — перенести те же схемы и loader в Yandex Object Storage и Managed ClickHouse, не меняя протестированные transformations и quality rules.
 
 ## ClickHouse analytical storage
 
@@ -214,3 +214,65 @@ DataLens следует подключать отдельным read-only пол
 существующего wide-дашборда является `mart_country_year_wide`; универсальные графики и
 будущие agent tools могут использовать `mart_indicator_timeseries`,
 `mart_country_snapshot` и `mart_data_quality`.
+
+## Детерминированный analytical core
+
+Analytical core находится между ClickHouse marts и будущим Tool API:
+
+```text
+ClickHouse marts
+      ↓
+AnalyticalRepository
+      ↓
+Timeseries / Snapshot / Data Quality models
+      ↓
+pure calculations
+      ↓
+Trend / Comparison / Correlation results
+      ↓
+FastAPI tools
+      ↓
+LLM planner + verifier
+```
+
+`AnalyticalRepository` имеет только read-only client protocol: в нем отсутствуют
+`command`, `insert`, DDL и DML. Пользователь или модель передают только страны,
+metric selectors, годы и точные dimensions. Все значения связываются через query
+parameters; SQL-фрагменты и имена таблиц не принимаются.
+
+Поддерживаемые операции:
+
+- `get_timeseries` — bounded time series с evidence и coverage;
+- `get_country_snapshot` — latest, common-year и fixed-year snapshot;
+- `get_data_quality` — coverage из dimension-aware `mart_data_quality`;
+- `calculate_trend` — change, CAGR, slope и volatility;
+- `compare_countries` — сравнение по последнему общему или заданному году;
+- `calculate_correlation` — Pearson/Spearman по совпадающим country-year pairs.
+
+Metric selector разрешается в активном ClickHouse run по alias, indicator code или
+точной паре `SOURCE_ID:CODE`. Для multidimensional series используется
+`MetricRequest(dimensions=...)`. Если код присутствует в нескольких sources или
+требуемая dimension slice не выбрана, core возвращает явную ошибку и не агрегирует
+значения молча.
+
+Каждый числовой point сохраняет provenance:
+
+```text
+run_id
+source_id
+indicator_code
+country_code
+year
+value
+unit
+dimensions_json
+```
+
+Это является основой для будущего verifier: текстовый вывод LLM можно будет
+сопоставить с конкретными evidence points, а не доверять сгенерированным числам.
+
+Analytical core применяет safety limits на страны, metrics, годы и число строк.
+Расчеты пропускают null, но не заменяют их нулями. Ranking означает только порядок
+по числовому значению; направление «лучше/хуже» должно задаваться отдельной
+семантикой продукта. Correlation всегда сопровождается размером выборки и
+предупреждением, что связь не доказывает причинность.

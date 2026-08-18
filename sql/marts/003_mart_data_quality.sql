@@ -18,6 +18,7 @@ SELECT
     i.category AS indicator_category,
     o.country_code AS country_code,
     c.country_name AS country_name,
+    o.dimensions_json AS dimensions_json,
     count() AS row_count,
     countIf(o.value IS NOT NULL) AS non_null_count,
     countIf(o.value IS NULL) AS null_count,
@@ -44,5 +45,6 @@ GROUP BY
     i.category,
     o.country_code,
     c.country_name,
+    o.dimensions_json,
     period.min_year,
     period.max_year
