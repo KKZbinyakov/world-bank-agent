@@ -153,6 +153,9 @@ def test_calculate_pearson_correlation_matches_country_year_pairs() -> None:
     assert result.coefficient == pytest.approx(1.0)
     assert result.sample_size == 4
     assert result.dropped_pairs == 0
+    assert result.run_id == "run-1"
+    assert result.x_dimensions_json == "{}"
+    assert result.y_dimensions_json == "{}"
     assert result.countries_used == ("DEU", "NLD")
     assert result.y_indicator_code == "SL.UEM.TOTL.ZS"
     assert len(result.pairs) == 4

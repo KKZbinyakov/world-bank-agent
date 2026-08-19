@@ -51,6 +51,11 @@ class AppSettings(BaseSettings):
     research_config_path: Path = Path("configs/research.yaml")
     indicators_config_path: Path = Path("configs/indicators.yaml")
     country_groups_config_path: Path = Path("configs/country_groups.yaml")
+    marts_config_path: Path = Path("configs/marts.yaml")
+
+    api_host: str = "0.0.0.0"
+    api_port: int = Field(default=8000, ge=1, le=65535)
+    api_docs_enabled: bool = True
 
     clickhouse_host: str | None = "localhost"
     clickhouse_port: int = Field(default=8123, ge=1, le=65535)

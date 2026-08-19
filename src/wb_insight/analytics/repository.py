@@ -10,11 +10,16 @@ from typing import Any, Protocol, cast
 
 from wb_insight.analytics.models import (
     AmbiguousMetricError,
+    CountryCatalogEntry,
     CountrySnapshotResult,
+    CurrentRunSummary,
     DataQualityEntry,
     DataQualityResult,
+    DimensionRequiredError,
+    IndicatorCatalogEntry,
     MetricNotFoundError,
     MetricRequest,
+    RepositoryReadiness,
     ResolvedMetric,
     ResultLimitError,
     SeriesCoverage,
@@ -27,6 +32,12 @@ from wb_insight.config import AppSettings
 
 _COUNTRY_RE = re.compile(r"^[A-Z]{3}$")
 _EXPLICIT_METRIC_RE = re.compile(r"^(?P<source>\d+):(?P<code>[A-Za-z0-9._-]+)$")
+_REQUIRED_ANALYTICAL_OBJECTS = (
+    "etl_run",
+    "mart_country_snapshot",
+    "mart_data_quality",
+    "mart_indicator_timeseries",
+)
 
 
 class QueryResult(Protocol):
@@ -106,6 +117,286 @@ class AnalyticalRepository:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    def ping(self) -> bool:
+        """Return whether a minimal read-only query succeeds."""
+
+        rows = self._query("SELECT 1")
+        return bool(rows and rows[0] and int(rows[0][0]) == 1)
+
+    def get_readiness(self) -> RepositoryReadiness:
+        """Validate required analytical objects and an active loaded run."""
+
+        rows = self._query(
+            """
+            SELECT name
+            FROM system.tables
+            WHERE database = currentDatabase()
+              AND name IN {required_objects:Array(String)}
+            """,
+            {"required_objects": list(_REQUIRED_ANALYTICAL_OBJECTS)},
+        )
+        available = {str(row[0]) for row in rows if row}
+        missing = tuple(name for name in _REQUIRED_ANALYTICAL_OBJECTS if name not in available)
+        current_run = self.get_current_run() if not missing else None
+        return RepositoryReadiness(
+            ready=not missing and current_run is not None,
+            current_run_id=current_run.run_id if current_run is not None else None,
+            missing_objects=missing,
+        )
+
+    def get_current_run(self) -> CurrentRunSummary | None:
+        """Return scope metadata for the most recently loaded analytical run."""
+
+        rows = self._query(
+            """
+            WITH latest_run AS
+            (
+                SELECT run_id, loaded_at
+                FROM etl_run
+                WHERE status = 'loaded'
+                ORDER BY loaded_at DESC, run_id DESC
+                LIMIT 1
+            )
+            SELECT
+                r.run_id,
+                r.loaded_at,
+                uniqExact(t.country_code) AS country_count,
+                uniqExact(tuple(t.source_id, t.indicator_code)) AS indicator_count,
+                count(t.year) AS observation_count,
+                nullIf(min(t.year), 0) AS start_year,
+                nullIf(max(t.year), 0) AS end_year,
+                arraySort(groupUniqArray(t.source_id)) AS source_ids
+            FROM latest_run AS r
+            LEFT JOIN mart_indicator_timeseries AS t ON t.run_id = r.run_id
+            GROUP BY r.run_id, r.loaded_at
+            """
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return CurrentRunSummary(
+            run_id=str(row[0]),
+            loaded_at=cast(Any, row[1]),
+            country_count=int(row[2]),
+            indicator_count=int(row[3]),
+            observation_count=int(row[4]),
+            start_year=_optional_int(row[5]),
+            end_year=_optional_int(row[6]),
+            source_ids=tuple(int(value) for value in cast(Sequence[Any], row[7] or [])),
+        )
+
+    def get_countries(
+        self,
+        countries: Sequence[str],
+    ) -> tuple[CountryCatalogEntry, ...]:
+        """Return exact country metadata for codes available in the active run."""
+
+        country_codes = self._validate_countries(countries)
+        rows = self._query(
+            """
+            WITH (
+                SELECT argMax(run_id, loaded_at)
+                FROM etl_run
+                WHERE status = 'loaded'
+            ) AS current_run
+            SELECT
+                current_run AS run_id,
+                t.country_code AS country_code,
+                any(t.country_name) AS country_name,
+                any(t.region_name) AS region_name,
+                any(t.income_level_name) AS income_level_name,
+                any(t.longitude) AS longitude,
+                any(t.latitude) AS latitude
+            FROM mart_indicator_timeseries AS t
+            WHERE t.run_id = current_run
+              AND t.country_code IN {countries:Array(String)}
+            GROUP BY t.country_code
+            ORDER BY t.country_code
+            """,
+            {"countries": list(country_codes)},
+        )
+        return tuple(_country_catalog_entry(row) for row in rows)
+
+    def search_countries(
+        self,
+        *,
+        query: str = "",
+        region: str | None = None,
+        income_level: str | None = None,
+        additional_country_codes: Sequence[str] = (),
+        limit: int = 20,
+    ) -> tuple[CountryCatalogEntry, ...]:
+        """Search countries present in the active analytical run.
+
+        Blank discovery requests use a dedicated query path. Besides being simpler, this
+        avoids evaluating text-search expressions against an empty search term in the
+        live ClickHouse query.
+        """
+
+        if not 1 <= limit <= 100:
+            raise ValueError("country search limit must be between 1 and 100")
+
+        clean_query = query.strip()
+        clean_region = (region or "").strip()
+        clean_income_level = (income_level or "").strip()
+        extra_codes = tuple(
+            code
+            for code in dict.fromkeys(
+                str(value).strip().upper() for value in additional_country_codes
+            )
+            if _COUNTRY_RE.fullmatch(code)
+        )
+        parameters: dict[str, Any] = {
+            "region": clean_region,
+            "income_level": clean_income_level,
+            "limit": limit,
+        }
+
+        search_clause = ""
+        order_clause = "country_name"
+        if clean_query:
+            parameters["query"] = clean_query
+            parameters["additional_country_codes"] = list(extra_codes)
+            search_clause = """
+                AND
+                (
+                    positionCaseInsensitiveUTF8(
+                        country_code, {query:String}
+                    ) > 0
+                    OR positionCaseInsensitiveUTF8(
+                        country_name, {query:String}
+                    ) > 0
+                    OR country_code IN {additional_country_codes:Array(String)}
+                )
+            """
+            order_clause = """
+                multiIf(
+                    lowerUTF8(country_code) = lowerUTF8({query:String}), 0,
+                    lowerUTF8(country_name) = lowerUTF8({query:String}), 1,
+                    startsWith(lowerUTF8(country_name), lowerUTF8({query:String})), 2,
+                    3
+                ),
+                country_name
+            """
+
+        rows = self._query(
+            f"""
+            WITH (
+                SELECT argMax(run_id, loaded_at)
+                FROM etl_run
+                WHERE status = 'loaded'
+            ) AS current_run
+            SELECT *
+            FROM
+            (
+                SELECT
+                    current_run AS run_id,
+                    t.country_code AS country_code,
+                    any(t.country_name) AS country_name,
+                    any(t.region_name) AS region_name,
+                    any(t.income_level_name) AS income_level_name,
+                    any(t.longitude) AS longitude,
+                    any(t.latitude) AS latitude
+                FROM mart_indicator_timeseries AS t
+                WHERE t.run_id = current_run
+                GROUP BY t.country_code
+            )
+            WHERE
+                (
+                    {{region:String}} = ''
+                    OR lowerUTF8(region_name) = lowerUTF8({{region:String}})
+                )
+                AND (
+                    {{income_level:String}} = ''
+                    OR lowerUTF8(income_level_name) = lowerUTF8(
+                        {{income_level:String}}
+                    )
+                )
+                {search_clause}
+            ORDER BY {order_clause}
+            LIMIT {{limit:UInt32}}
+            """,
+            parameters,
+        )
+        return tuple(_country_catalog_entry(row) for row in rows)
+
+    def search_indicators(
+        self,
+        *,
+        query: str,
+        categories: Sequence[str] = (),
+        limit: int = 20,
+    ) -> tuple[IndicatorCatalogEntry, ...]:
+        """Search indicators that are actually available in the active run."""
+
+        clean_query = query.strip()
+        if not clean_query:
+            raise ValueError("indicator search query cannot be blank")
+        if not 1 <= limit <= 100:
+            raise ValueError("indicator search limit must be between 1 and 100")
+        clean_categories = tuple(
+            dict.fromkeys(str(value).strip().lower() for value in categories if str(value).strip())
+        )
+        category_clause = ""
+        if clean_categories:
+            category_clause = (
+                "AND lowerUTF8(ifNull(indicator_category, '')) IN {categories:Array(String)}"
+            )
+        parameters: dict[str, Any] = {
+            "query": clean_query,
+            "categories": list(clean_categories),
+            "limit": limit,
+        }
+        rows = self._query(
+            f"""
+            WITH (
+                SELECT argMax(run_id, loaded_at)
+                FROM etl_run
+                WHERE status = 'loaded'
+            ) AS current_run
+            SELECT *
+            FROM
+            (
+                SELECT
+                    current_run AS run_id,
+                    t.source_id AS source_id,
+                    t.indicator_code AS indicator_code,
+                    any(t.indicator_alias) AS indicator_alias,
+                    any(t.indicator_name) AS indicator_name,
+                    any(t.indicator_name_ru) AS indicator_name_ru,
+                    any(t.indicator_category) AS indicator_category,
+                    any(t.unit) AS unit,
+                    any(t.display_unit) AS display_unit,
+                    arraySort(groupUniqArray(t.dimensions_json)) AS dimensions_json
+                FROM mart_indicator_timeseries AS t
+                WHERE t.run_id = current_run
+                GROUP BY t.source_id, t.indicator_code
+            )
+            WHERE
+                (
+                    positionCaseInsensitiveUTF8(indicator_code, {{query:String}}) > 0
+                    OR positionCaseInsensitiveUTF8(
+                        ifNull(indicator_alias, ''), {{query:String}}
+                    ) > 0
+                    OR positionCaseInsensitiveUTF8(indicator_name, {{query:String}}) > 0
+                    OR positionCaseInsensitiveUTF8(
+                        ifNull(indicator_name_ru, ''), {{query:String}}
+                    ) > 0
+                )
+                {category_clause}
+            ORDER BY
+                multiIf(
+                    lowerUTF8(indicator_code) = lowerUTF8({{query:String}}), 0,
+                    lowerUTF8(ifNull(indicator_alias, '')) = lowerUTF8({{query:String}}), 1,
+                    2
+                ),
+                indicator_name
+            LIMIT {{limit:UInt32}}
+            """,
+            parameters,
+        )
+        return tuple(_indicator_catalog_entry(row) for row in rows)
 
     def resolve_metrics(
         self,
@@ -442,7 +733,13 @@ class AnalyticalRepository:
             if _dimensions_match(metric.dimensions_json, request.dimensions)
         )
         if not matching_dimensions:
-            available = ", ".join(sorted({metric.dimensions_json for metric in candidates}))
+            available_values = sorted({metric.dimensions_json for metric in candidates})
+            available = ", ".join(available_values)
+            if not request.dimensions and all(value != "{}" for value in available_values):
+                raise DimensionRequiredError(
+                    f"metric {request.selector} requires an explicit dimension slice; "
+                    f"available: {available}"
+                )
             raise MetricNotFoundError(
                 f"metric {request.selector} does not expose dimensions {request.dimensions}; "
                 f"available: {available}"
@@ -555,6 +852,34 @@ def _metric_predicate(
         parts.append(f"dimensions_json = {{{dimensions_key}:String}}")
         conditions.append("(" + " AND ".join(parts) + ")")
     return " OR ".join(conditions)
+
+
+def _country_catalog_entry(row: Sequence[Any]) -> CountryCatalogEntry:
+    return CountryCatalogEntry(
+        run_id=str(row[0]),
+        country_code=str(row[1]),
+        country_name=str(row[2]),
+        region_name=_optional_str(row[3]),
+        income_level_name=_optional_str(row[4]),
+        longitude=_optional_float(row[5]),
+        latitude=_optional_float(row[6]),
+    )
+
+
+def _indicator_catalog_entry(row: Sequence[Any]) -> IndicatorCatalogEntry:
+    dimensions = cast(Sequence[Any], row[9] or [])
+    return IndicatorCatalogEntry(
+        run_id=str(row[0]),
+        source_id=int(row[1]),
+        indicator_code=str(row[2]),
+        alias=_optional_str(row[3]),
+        indicator_name=str(row[4]),
+        indicator_name_ru=_optional_str(row[5]),
+        category=_optional_str(row[6]),
+        unit=_optional_str(row[7]),
+        display_unit=_optional_str(row[8]),
+        dimensions_json=tuple(str(value) for value in dimensions),
+    )
 
 
 def _resolved_metric(row: Sequence[Any]) -> ResolvedMetric:
