@@ -8,7 +8,7 @@ import pytest
 from wb_insight.analytics import (
     AmbiguousMetricError,
     AnalyticalRepository,
-    MetricNotFoundError,
+    DimensionRequiredError,
     MetricRequest,
     ResultLimitError,
 )
@@ -220,7 +220,7 @@ def test_resolve_metric_reports_available_dimensions() -> None:
     client = QueueClient([[_metric_row(dimensions='{"Counterpart-Area":"WLD"}')]])
     repository = AnalyticalRepository(client)
 
-    with pytest.raises(MetricNotFoundError, match="available"):
+    with pytest.raises(DimensionRequiredError, match="explicit dimension"):
         repository.resolve_metrics(["2:NY.GDP.PCAP.CD"])
 
 

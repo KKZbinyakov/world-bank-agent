@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
+from fastapi.testclient import TestClient
 
 from wb_insight.analytics import (
     AnalyticalRepository,
@@ -13,8 +14,11 @@ from wb_insight.analytics import (
     calculate_trend,
     compare_countries,
 )
+from wb_insight.api.dependencies import get_tool_service
+from wb_insight.api.main import create_app
 from wb_insight.config import AppSettings
 from wb_insight.storage import ClickHouseRepository
+from wb_insight.tools import ToolService
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN_ID = "ci_clickhouse_integration_v1"
@@ -362,3 +366,112 @@ def test_analytical_core_queries_live_clickhouse(tmp_path: Path) -> None:
     correlation = calculate_correlation(gdp.points, unemployment.points)
     assert correlation.sample_size == 3
     assert correlation.coefficient is not None
+
+
+def test_tool_api_queries_live_clickhouse(tmp_path: Path) -> None:
+    run_dir, mart_dir = _write_fixture(tmp_path)
+    settings = _settings()
+    with ClickHouseRepository.from_settings(settings) as storage:
+        storage.apply_sql_directory(ROOT / "sql" / "ddl")
+        storage.apply_sql_directory(ROOT / "sql" / "marts")
+        storage.load_processed_run(run_dir, mart_dir=mart_dir, batch_size=2)
+
+    def override_tool_service() -> Any:
+        with AnalyticalRepository.from_settings(settings) as repository:
+            yield ToolService(repository)
+
+    app = create_app(settings)
+    app.dependency_overrides[get_tool_service] = override_tool_service
+    client = TestClient(app)
+
+    ready = client.get("/health/ready")
+    assert ready.status_code == 200
+    assert ready.json()["data"]["current_run_id"] == RUN_ID
+
+    current = client.get("/v1/meta/current-run")
+    assert current.status_code == 200
+    assert current.json()["data"]["country_count"] == 2
+    assert current.json()["data"]["indicator_count"] == 2
+
+    countries = client.post("/v1/tools/search-countries", json={"query": "Germany"})
+    assert countries.status_code == 200
+    assert countries.json()["data"]["matches"][0]["country_code"] == "DEU"
+
+    country_discovery = client.post(
+        "/v1/tools/search-countries",
+        json={"query": "", "limit": 2},
+    )
+    assert country_discovery.status_code == 200, country_discovery.text
+    assert len(country_discovery.json()["data"]["matches"]) == 2
+
+    indicators = client.post("/v1/tools/search-indicators", json={"query": "GDP"})
+    assert indicators.status_code == 200
+    assert indicators.json()["data"]["matches"][0]["indicator_code"] == "NY.GDP.PCAP.CD"
+
+    timeseries = client.post(
+        "/v1/tools/timeseries",
+        json={
+            "countries": ["DEU", "NLD"],
+            "metrics": ["2:NY.GDP.PCAP.CD"],
+            "start_year": 2023,
+            "end_year": 2024,
+        },
+    )
+    assert timeseries.status_code == 200
+    assert len(timeseries.json()["data"]["points"]) == 4
+
+    snapshot = client.post(
+        "/v1/tools/country-snapshot",
+        json={
+            "countries": ["DEU", "NLD"],
+            "metrics": ["2:NY.GDP.PCAP.CD"],
+            "mode": "common_year",
+        },
+    )
+    assert snapshot.status_code == 200
+    assert snapshot.json()["data"]["comparison_year"] == 2024
+
+    trend = client.post(
+        "/v1/tools/trend",
+        json={
+            "country": "DEU",
+            "metric": "2:NY.GDP.PCAP.CD",
+            "start_year": 2023,
+            "end_year": 2024,
+        },
+    )
+    assert trend.status_code == 200
+    assert trend.json()["data"]["absolute_change"] == pytest.approx(2_000.0)
+
+    comparison = client.post(
+        "/v1/tools/compare-countries",
+        json={
+            "countries": ["DEU", "NLD"],
+            "metric": "2:NY.GDP.PCAP.CD",
+        },
+    )
+    assert comparison.status_code == 200
+    assert comparison.json()["data"]["year"] == 2024
+
+    correlation = client.post(
+        "/v1/tools/correlation",
+        json={
+            "countries": ["DEU", "NLD"],
+            "x_metric": "2:NY.GDP.PCAP.CD",
+            "y_metric": "2:SL.UEM.TOTL.ZS",
+            "start_year": 2023,
+            "end_year": 2024,
+        },
+    )
+    assert correlation.status_code == 200
+    assert correlation.json()["data"]["sample_size"] == 3
+
+    quality = client.post(
+        "/v1/tools/data-quality",
+        json={
+            "countries": ["DEU", "NLD"],
+            "metrics": ["2:SL.UEM.TOTL.ZS"],
+        },
+    )
+    assert quality.status_code == 200
+    assert len(quality.json()["data"]["entries"]) == 2

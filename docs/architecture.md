@@ -38,16 +38,19 @@ Parquet + quality_report.json
    dynamics, country comparison, peer benchmark, correlations
 
 5. Agent tools
-   typed read-only functions over analytical marts
+   typed read-only orchestration over the deterministic analytical core
 
-6. Agent and API
-   tool orchestration, verifier, backend and user interface
+6. Versioned Tool API
+   FastAPI, OpenAPI contracts, stable errors, request tracing and health probes
+
+7. Agent
+   planner, verifier, conversation state and user interface
 ```
 
 ## Правило зависимостей
 
 ```text
-agent → tools → analytics → analytical storage → transforms/storage → ingestion
+agent → Tool API → tools → analytics → analytical storage → transforms/storage → ingestion
 ```
 
 - HTTP client не содержит pandas-логику;
@@ -55,7 +58,8 @@ agent → tools → analytics → analytical storage → transforms/storage → 
 - quality checks работают на нормализованных таблицах;
 - pipeline связывает компоненты, но не хранит аналитическую бизнес-логику;
 - notebooks используют функции пакета, а не дублируют ETL;
-- агент в будущем получает только типизированные read-only tools, а не произвольный SQL.
+- Tool API публикует только типизированные read-only operations, а не произвольный SQL;
+- будущий агент обращается к versioned HTTP contract, а не к ClickHouse напрямую.
 
 ## Raw layer
 
@@ -217,7 +221,7 @@ DataLens следует подключать отдельным read-only пол
 
 ## Детерминированный analytical core
 
-Analytical core находится между ClickHouse marts и будущим Tool API:
+Analytical core находится между ClickHouse marts и реализованным Tool API:
 
 ```text
 ClickHouse marts
@@ -276,3 +280,55 @@ Analytical core применяет safety limits на страны, metrics, г�
 по числовому значению; направление «лучше/хуже» должно задаваться отдельной
 семантикой продукта. Correlation всегда сопровождается размером выборки и
 предупреждением, что связь не доказывает причинность.
+
+## Versioned read-only Tool API
+
+Tool API является стабильной границей между детерминированной аналитикой и будущими
+агентскими адаптерами. Он не содержит SQL и не выполняет недетерминированные расчеты.
+
+```text
+HTTP / OpenAPI
+      ↓
+FastAPI request validation
+      ↓
+ToolService
+      ↓
+AnalyticalRepository + pure statistics
+      ↓
+ClickHouse marts
+```
+
+Публичные группы операций:
+
+```text
+/health/live
+/health/ready
+/v1/meta/current-run
+/v1/tools/search-countries
+/v1/tools/search-indicators
+/v1/tools/timeseries
+/v1/tools/country-snapshot
+/v1/tools/trend
+/v1/tools/compare-countries
+/v1/tools/correlation
+/v1/tools/data-quality
+```
+
+Каждая tool operation имеет стабильный `operation_id`, Pydantic request/response schema и
+единый envelope с `request_id`, временем выполнения и типизированным `data`. Ошибки также
+имеют стабильные коды и не раскрывают SQL, credentials, host ClickHouse или stack trace.
+
+`ToolService` отделен от FastAPI, поэтому тот же orchestration layer можно повторно
+использовать из REST, будущего MCP-адаптера или backend Yandex AI Studio. HTTP routers не
+обращаются к ClickHouse напрямую и не дублируют статистические расчеты.
+
+ClickHouse dependency создается на один request и закрывается после ответа. Liveness не
+зависит от базы, а readiness проверяет подключение, обязательные marts и наличие active run.
+Русские названия стран для каталожного поиска загружаются из `configs/marts.yaml`;
+аналитические запросы по-прежнему используют ISO3.
+
+OpenAPI является источником истины для будущего преобразования операций в LLM tools.
+Contract tests фиксируют публичные paths и operation IDs и отдельно проверяют, что API не
+принимает параметры `sql` или `table`. Live ClickHouse integration test проходит весь путь
+от synthetic Parquet fixture до HTTP JSON response.
+

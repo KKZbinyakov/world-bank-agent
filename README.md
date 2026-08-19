@@ -28,7 +28,7 @@ read-only analytical tools
 Yandex Cloud AI Studio agent
 ```
 
-Сейчас реализованы ingestion, Silver-слой, semantic registry, универсальные DataLens-витрины, ClickHouse storage/loader и детерминированный read-only analytical core. Tool API, Airflow и LLM-агент будут добавлены следующими этапами.
+Сейчас реализованы ingestion, Silver-слой, semantic registry, универсальные DataLens-витрины, ClickHouse storage/loader, детерминированный analytical core и версионированный read-only Tool API. Облачное развёртывание, Airflow и LLM-агент будут добавлены следующими этапами.
 
 ---
 
@@ -58,7 +58,10 @@ Yandex Cloud AI Studio agent
 - загрузка Silver Parquet и Gold marts в ClickHouse;
 - SQL views для временных рядов, snapshot и data quality;
 - read-only `AnalyticalRepository`;
-- временные ряды, snapshot, тренды, сравнение стран, корреляции и quality analytics.
+- временные ряды, snapshot, тренды, сравнение стран, корреляции и quality analytics;
+- FastAPI Tool API с `/v1`, OpenAPI и стабильными operation IDs;
+- поиск стран и показателей в active run;
+- request ID, timing, health/readiness и унифицированные ошибки.
 
 ---
 
@@ -1134,7 +1137,123 @@ Actions на отдельной базе `wb_insight_ci`.
 
 ---
 
-# 16. Continuous Integration
+# 16. Versioned Tool API
+
+Tool API находится между analytical core и будущим LLM-агентом:
+
+```text
+HTTP / OpenAPI
+      ↓
+FastAPI request validation
+      ↓
+ToolService
+      ↓
+AnalyticalRepository
+      ↓
+ClickHouse marts
+      ↓
+typed evidence + warnings
+```
+
+API не принимает SQL, имена таблиц, DDL или DML. Публичный контракт содержит только страны, metric selectors, годы и точные dimension slices.
+
+Runtime-параметры в `.env`:
+
+```dotenv
+API_HOST=0.0.0.0
+API_PORT=8000
+API_DOCS_ENABLED=true
+MARTS_CONFIG_PATH=configs/marts.yaml
+```
+
+Запуск:
+
+```powershell
+.\.venv\Scripts\python.exe -m wb_insight.api.main
+```
+
+или после установки console scripts:
+
+```powershell
+.\.venv\Scripts\wb-insight-api.exe
+```
+
+Документация и OpenAPI:
+
+```text
+http://127.0.0.1:8000/docs
+http://127.0.0.1:8000/openapi.json
+```
+
+Служебные endpoints:
+
+```text
+GET /health/live
+GET /health/ready
+GET /v1/meta/current-run
+```
+
+Аналитические tools:
+
+```text
+POST /v1/tools/search-countries
+POST /v1/tools/search-indicators
+POST /v1/tools/timeseries
+POST /v1/tools/country-snapshot
+POST /v1/tools/trend
+POST /v1/tools/compare-countries
+POST /v1/tools/correlation
+POST /v1/tools/data-quality
+```
+
+Пример временного ряда:
+
+```powershell
+$body = @{
+    countries = @("DEU", "FRA", "POL")
+    metrics = @("gdp_per_capita")
+    start_year = 2015
+    end_year = 2024
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+    -Method Post `
+    -Uri "http://127.0.0.1:8000/v1/tools/timeseries" `
+    -ContentType "application/json" `
+    -Body $body
+```
+
+Для multidimensional indicator:
+
+```json
+{
+  "selector": "6:DT.DOD.DECT.CD",
+  "dimensions": {
+    "Counterpart-Area": "WLD"
+  }
+}
+```
+
+API не агрегирует такие срезы молча. Без обязательного dimension slice возвращается `409 dimension_required`. Числовые ответы сохраняют `run_id`, source-qualified metric identity, units и evidence.
+
+Smoke-test API in-process через FastAPI `TestClient` и текущий ClickHouse:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_test_api.py
+```
+
+Для проверки отдельно запущенного HTTP-сервера задайте:
+
+```powershell
+$env:WB_TOOL_API_URL="http://127.0.0.1:8000"
+.\.venv\Scripts\python.exe scripts\smoke_test_api.py
+```
+
+Полная документация: [`docs/tool_api.md`](docs/tool_api.md).
+
+---
+
+# 17. Continuous Integration
 
 Workflow:
 
@@ -1177,6 +1296,10 @@ ClickHouse loader
 SQL views
   ↓
 wide mart + metric catalog
+  ↓
+AnalyticalRepository + ToolService
+  ↓
+FastAPI TestClient / public contract
   ↓
 idempotent reload
 ```
@@ -1231,7 +1354,7 @@ ClickHouse integration
 
 ---
 
-# 17. Проверка качества кода
+# 18. Проверка качества кода
 
 Перед коммитом:
 
@@ -1250,7 +1373,7 @@ make check
 
 ---
 
-# 18. Git и `.gitignore`
+# 19. Git и `.gitignore`
 
 В Git не должны попадать:
 
@@ -1298,7 +1421,7 @@ git check-ignore -v "data\marts\configured\worldbank_datalens_wide.csv"
 
 ---
 
-# 19. Troubleshooting
+# 20. Troubleshooting
 
 ## `No module named ...`
 
@@ -1360,7 +1483,7 @@ Long-витрина содержит metadata-поля разных типов. 
 
 ---
 
-# 20. Структура проекта
+# 21. Структура проекта
 
 ```text
 wb-insight-agent/
@@ -1378,6 +1501,8 @@ wb-insight-agent/
 │       ├── quality/
 │       ├── marts/
 │       ├── analytics/
+│       ├── tools/
+│       ├── api/
 │       ├── pipeline.py
 │       ├── config.py
 │       └── cli.py
@@ -1386,7 +1511,8 @@ wb-insight-agent/
 │   ├── export_datalens_csv.py
 │   ├── load_clickhouse.py
 │   ├── smoke_test_clickhouse.py
-│   └── smoke_test_analytics.py
+│   ├── smoke_test_analytics.py
+│   └── smoke_test_api.py
 │
 ├── sql/
 │   ├── ddl/
@@ -1413,7 +1539,11 @@ wb-insight-agent/
 │   ├── test_marts.py
 │   ├── test_clickhouse_storage.py
 │   ├── test_analytical_repository.py
-│   └── test_analytical_statistics.py
+│   ├── test_analytical_statistics.py
+│   ├── test_analytical_catalog.py
+│   ├── test_tool_service.py
+│   ├── test_api.py
+│   └── test_api_contract.py
 │
 ├── docs/
 ├── docker-compose.yml
@@ -1426,7 +1556,7 @@ wb-insight-agent/
 
 ---
 
-# 21. Следующие этапы
+# 22. Следующие этапы
 
 Текущий data layer:
 
@@ -1449,11 +1579,9 @@ DataLens
 ```text
 Yandex Object Storage / Managed ClickHouse deployment
         ↓
-read-only analytical tools
+Serverless Containers + API Gateway + Lockbox
         ↓
-FastAPI Tool API
-        ↓
-Yandex Cloud AI Studio agent
+Yandex Cloud AI Studio agent + verifier
         ↓
 Airflow orchestration and scheduled refresh
 ```

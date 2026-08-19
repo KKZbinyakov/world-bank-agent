@@ -123,6 +123,9 @@ jobs:
       - name: Run ClickHouse smoke script
         run: python scripts/smoke_test_clickhouse.py
 
+      - name: Run Tool API smoke script
+        run: python scripts/smoke_test_api.py
+
       - name: Print ClickHouse logs after a failure
         if: failure()
         shell: bash

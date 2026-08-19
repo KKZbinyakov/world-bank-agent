@@ -12,6 +12,7 @@ authors = [
   { name = "WB Insight Agent Team" },
 ]
 dependencies = [
+  "fastapi>=0.128,<1.0",
   "clickhouse-connect>=1.0,<2.0",
   "httpx>=0.28.1,<1.0",
   "pandas>=2.2,<3.0",
@@ -22,6 +23,7 @@ dependencies = [
   "rich>=13.9,<15.0",
   "tenacity>=9.0,<10.0",
   "typer>=0.15,<1.0",
+  "uvicorn[standard]>=0.48,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +40,7 @@ dev = [
 
 [project.scripts]
 wb-insight = "wb_insight.cli:app"
+wb-insight-api = "wb_insight.api.main:run"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

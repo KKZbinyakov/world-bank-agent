@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -25,6 +26,10 @@ class AmbiguousMetricError(AnalyticalError):
 
 class ResultLimitError(AnalyticalError):
     """Raised when a query would return more rows than the configured safety limit."""
+
+
+class DimensionRequiredError(AnalyticalError):
+    """Raised when a multidimensional metric requires an explicit slice."""
 
 
 class FrozenModel(BaseModel):
@@ -265,14 +270,21 @@ class CorrelationResult(FrozenModel):
     x_source_id: int
     x_indicator_code: str
     x_indicator_alias: str | None = None
+    x_unit: str | None = None
+    x_display_unit: str | None = None
+    x_dimensions_json: str = "{}"
     y_source_id: int
     y_indicator_code: str
     y_indicator_alias: str | None = None
+    y_unit: str | None = None
+    y_display_unit: str | None = None
+    y_dimensions_json: str = "{}"
     coefficient: float | None
     sample_size: int
     dropped_pairs: int
     countries_used: tuple[str, ...]
     years_used: tuple[int, ...]
+    run_id: str | None = None
     pairs: tuple[CorrelationPair, ...] = ()
     warnings: tuple[str, ...] = ()
 
@@ -305,3 +317,55 @@ class DataQualityResult(FrozenModel):
     metrics: tuple[ResolvedMetric, ...]
     entries: tuple[DataQualityEntry, ...]
     warnings: tuple[str, ...] = ()
+
+
+class CurrentRunSummary(FrozenModel):
+    """Metadata and active analytical scope of the latest loaded run."""
+
+    run_id: str
+    loaded_at: datetime
+    country_count: int = Field(ge=0)
+    indicator_count: int = Field(ge=0)
+    observation_count: int = Field(ge=0)
+    start_year: int | None = None
+    end_year: int | None = None
+    source_ids: tuple[int, ...] = ()
+
+
+class RepositoryReadiness(FrozenModel):
+    """Readiness state of the ClickHouse analytical boundary."""
+
+    ready: bool
+    current_run_id: str | None = None
+    missing_objects: tuple[str, ...] = ()
+
+
+class CountryCatalogEntry(FrozenModel):
+    """One country available in the active analytical run."""
+
+    run_id: str
+    country_code: str
+    country_name: str
+    region_name: str | None = None
+    income_level_name: str | None = None
+    longitude: float | None = None
+    latitude: float | None = None
+
+
+class IndicatorCatalogEntry(FrozenModel):
+    """One source-qualified indicator available in the active analytical run."""
+
+    run_id: str
+    source_id: int
+    indicator_code: str
+    alias: str | None = None
+    indicator_name: str
+    indicator_name_ru: str | None = None
+    category: str | None = None
+    unit: str | None = None
+    display_unit: str | None = None
+    dimensions_json: tuple[str, ...] = ()
+
+    @property
+    def metric_key(self) -> str:
+        return f"{self.source_id}:{self.indicator_code}"
