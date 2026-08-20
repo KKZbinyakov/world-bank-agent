@@ -89,7 +89,16 @@ Stable `operation_id` будут использоваться при преоб�
 
 ## Metric selectors
 
-Допустимы:
+Канонический selector — поле `metric_key`, которое возвращает
+`POST /v1/tools/search-indicators`. Оно имеет формат `SOURCE_ID:CODE` и не
+зависит от presentation-конфига:
+
+```json
+"2:NY.GDP.PCAP.CD"
+```
+
+Также принимаются semantic alias, однозначный World Bank code и
+`wide_column` из `mart_metric_catalog`:
 
 ```json
 "gdp_per_capita"
@@ -100,7 +109,7 @@ Stable `operation_id` будут использоваться при преоб�
 ```
 
 ```json
-"2:NY.GDP.PCAP.CD"
+"gdp_per_capita_current_usd"
 ```
 
 Для multidimensional indicator используется объект:
@@ -147,7 +156,7 @@ Invoke-RestMethod `
 ```json
 {
   "countries": ["DEU", "FRA", "POL"],
-  "metrics": ["gdp_per_capita"],
+  "metrics": ["2:NY.GDP.PCAP.CD"],
   "start_year": 2015,
   "end_year": 2024
 }

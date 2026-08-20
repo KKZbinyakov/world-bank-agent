@@ -37,6 +37,7 @@ _REQUIRED_ANALYTICAL_OBJECTS = (
     "mart_country_snapshot",
     "mart_data_quality",
     "mart_indicator_timeseries",
+    "mart_metric_catalog",
 )
 
 
@@ -696,29 +697,44 @@ class AnalyticalRepository:
         if explicit:
             parameters["source_id"] = int(explicit.group("source"))
             parameters["indicator_code"] = explicit.group("code")
-            condition = "source_id = {source_id:Int32} AND indicator_code = {indicator_code:String}"
+            condition = (
+                "t.source_id = {source_id:Int32} AND t.indicator_code = {indicator_code:String}"
+            )
         else:
             parameters["selector"] = request.selector
             condition = (
-                "(indicator_alias = {selector:String} OR indicator_code = {selector:String})"
+                "(t.indicator_alias = {selector:String} "
+                "OR t.indicator_code = {selector:String} "
+                "OR m.wide_column = {selector:String})"
             )
 
         query = f"""
+            WITH (
+                SELECT argMax(run_id, loaded_at)
+                FROM etl_run
+                WHERE status = 'loaded'
+            ) AS current_run
             SELECT
-                any(run_id) AS run_id,
-                source_id,
-                indicator_code,
-                any(indicator_alias) AS indicator_alias,
-                any(indicator_name) AS indicator_name,
-                any(indicator_name_ru) AS indicator_name_ru,
-                any(indicator_category) AS indicator_category,
-                any(unit) AS unit,
-                any(display_unit) AS display_unit,
-                dimensions_json
-            FROM mart_indicator_timeseries
-            WHERE {condition}
-            GROUP BY source_id, indicator_code, dimensions_json
-            ORDER BY source_id, indicator_code, dimensions_json
+                current_run AS run_id,
+                t.source_id AS source_id,
+                t.indicator_code AS indicator_code,
+                any(t.indicator_alias) AS indicator_alias,
+                any(t.indicator_name) AS indicator_name,
+                any(t.indicator_name_ru) AS indicator_name_ru,
+                any(t.indicator_category) AS indicator_category,
+                any(t.unit) AS unit,
+                any(t.display_unit) AS display_unit,
+                t.dimensions_json AS dimensions_json
+            FROM mart_indicator_timeseries AS t
+            LEFT JOIN mart_metric_catalog AS m
+                ON m.run_id = t.run_id
+               AND toInt32(m.source_id) = t.source_id
+               AND m.indicator_code = t.indicator_code
+               AND ifNull(m.dimension_signature, '{{}}') = t.dimensions_json
+            WHERE t.run_id = current_run
+              AND {condition}
+            GROUP BY t.source_id, t.indicator_code, t.dimensions_json
+            ORDER BY t.source_id, t.indicator_code, t.dimensions_json
         """
         rows = self._query(query, parameters)
         candidates = tuple(_resolved_metric(row) for row in rows)

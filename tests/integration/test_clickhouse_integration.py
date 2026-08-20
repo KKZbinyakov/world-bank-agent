@@ -95,7 +95,7 @@ def _indicator_rows() -> list[dict[str, Any]]:
             "indicator_code": "NY.GDP.PCAP.CD",
             "indicator_name": "GDP per capita (current US$)",
             "source_unit": None,
-            "alias": "gdp_per_capita_current_usd",
+            "alias": "gdp_per_capita",
             "name_ru": "ВВП на душу населения",
             "category": "economy",
             "category_source": "registry",
@@ -224,6 +224,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 "indicator_code": "NY.GDP.PCAP.CD",
                 "indicator_name": "GDP per capita (current US$)",
                 "wide_column": "gdp_per_capita_current_usd",
+                "dimension_signature": "{}",
                 "category": "economy",
                 "unit": "current_usd_per_person",
                 "display_unit": "US$ / person",
@@ -233,6 +234,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 "indicator_code": "SL.UEM.TOTL.ZS",
                 "indicator_name": "Unemployment, total (% of total labor force)",
                 "wide_column": "unemployment_pct_labor_force",
+                "dimension_signature": "{}",
                 "category": "labor",
                 "unit": "percent_of_labor_force",
                 "display_unit": "%",
@@ -419,6 +421,18 @@ def test_tool_api_queries_live_clickhouse(tmp_path: Path) -> None:
     )
     assert timeseries.status_code == 200
     assert len(timeseries.json()["data"]["points"]) == 4
+
+    presentation_alias_timeseries = client.post(
+        "/v1/tools/timeseries",
+        json={
+            "countries": ["DEU", "NLD"],
+            "metrics": ["gdp_per_capita_current_usd"],
+            "start_year": 2023,
+            "end_year": 2024,
+        },
+    )
+    assert presentation_alias_timeseries.status_code == 200, presentation_alias_timeseries.text
+    assert len(presentation_alias_timeseries.json()["data"]["points"]) == 4
 
     snapshot = client.post(
         "/v1/tools/country-snapshot",

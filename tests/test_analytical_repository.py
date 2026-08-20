@@ -157,7 +157,10 @@ def test_resolve_metric_supports_explicit_source_code() -> None:
     assert len(metrics) == 1
     assert metrics[0].metric_key == "2:NY.GDP.PCAP.CD"
     query, parameters = client.calls[0]
-    assert "source_id = {source_id:Int32}" in query
+    assert "t.source_id = {source_id:Int32}" in query
+    assert "FROM mart_indicator_timeseries AS t" in query
+    assert "WHERE t.run_id = current_run" in query
+    assert "any(run_id) AS run_id" not in query
     assert parameters == {"source_id": 2, "indicator_code": "NY.GDP.PCAP.CD"}
 
 
@@ -170,7 +173,22 @@ def test_metric_selector_is_bound_as_a_parameter() -> None:
 
     query, parameters = client.calls[0]
     assert selector not in query
+    assert "t.indicator_alias = {selector:String}" in query
+    assert "m.wide_column = {selector:String}" in query
     assert parameters == {"selector": selector}
+
+
+def test_resolve_metric_supports_presentation_wide_column() -> None:
+    client = QueueClient([[_metric_row(alias="gdp_per_capita")]])
+    repository = AnalyticalRepository(client)
+
+    metrics = repository.resolve_metrics(["gdp_per_capita_current_usd"])
+
+    assert metrics[0].metric_key == "2:NY.GDP.PCAP.CD"
+    query, parameters = client.calls[0]
+    assert "LEFT JOIN mart_metric_catalog AS m" in query
+    assert "m.wide_column = {selector:String}" in query
+    assert parameters == {"selector": "gdp_per_capita_current_usd"}
 
 
 def test_resolve_metric_rejects_ambiguous_code() -> None:

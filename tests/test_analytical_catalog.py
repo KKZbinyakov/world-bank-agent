@@ -49,6 +49,7 @@ def test_readiness_requires_objects_and_active_run() -> None:
                 ["mart_country_snapshot"],
                 ["mart_data_quality"],
                 ["mart_indicator_timeseries"],
+                ["mart_metric_catalog"],
             ],
             [["run-1", loaded_at, 3, 2, 12, 2023, 2024, [2, 3]]],
         ]
@@ -70,7 +71,11 @@ def test_readiness_reports_missing_mart_without_querying_run() -> None:
 
     assert result.ready is False
     assert result.current_run_id is None
-    assert set(result.missing_objects) == {"mart_country_snapshot", "mart_data_quality"}
+    assert set(result.missing_objects) == {
+        "mart_country_snapshot",
+        "mart_data_quality",
+        "mart_metric_catalog",
+    }
     assert len(client.calls) == 1
 
 
